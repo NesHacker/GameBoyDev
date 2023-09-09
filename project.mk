@@ -1,6 +1,5 @@
 # This file contains project configuration
 
-
 # Value that the ROM will be filled with
 PADVALUE := 0xFF
 
@@ -13,7 +12,7 @@ VERSION := 0
 GAMEID := BOIL
 
 # Game title, up to 11 ASCII chars
-TITLE := BOILERPLATE
+TITLE := GAMEBOYDEV
 
 # New licensee, 2 ASCII chars
 # Homebrew games FTW!
@@ -22,8 +21,8 @@ LICENSEE := HB
 OLDLIC := 0x33
 
 # MBC type, tells which hardware is in the cart
-# See https://gbdev.io/pandocs/#_0147-cartridge-type or consult any copy of Pan Docs
-# If using no MBC, consider enabling `-t` below
+# See https://gbdev.io/pandocs/#_0147-cartridge-type or consult any copy of Pan
+# Docs if using no MBC, consider enabling `-t` below
 MBC := 0x00
 
 # ROM size is set automatically by RGBFIX
@@ -34,9 +33,8 @@ MBC := 0x00
 SRAMSIZE := 0x00
 
 # ROM name
-ROMNAME := boilerplate
+ROMNAME := GameBoyDev
 ROMEXT  := gb
-
 
 # Compilation parameters, uncomment to apply, comment to cancel
 # "Sensible defaults" are included
