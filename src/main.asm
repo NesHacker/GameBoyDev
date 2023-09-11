@@ -42,6 +42,51 @@ Main:
 GameLoop:
   call AnimateBackground
   call ReadJoypad
+  call FreeMoveCamera
+  ret
+
+; ------------------------------------------------------------------------------
+; `func FreeMoveCamera()`
+;
+; This is a test function to move the camera window incrementally based on the
+; current joypad directional inputs.
+; ------------------------------------------------------------------------------
+FreeMoveCamera:
+  ld hl, rSCX
+  ld a, [mask_JoypadDown]
+  ld b, a
+  and BUTTON_RIGHT
+  jr z, .check_left
+  inc [hl]
+  inc [hl]
+  jr .check_up
+.check_left
+  ld a, b
+  and BUTTON_LEFT
+  jr z, .check_up
+  dec [hl]
+  dec [hl]
+.check_up
+  ld hl, rSCY
+  ld a, b
+  and BUTTON_UP
+  jr z, .check_down
+  ld a, [rSCY]
+  cp 0
+  jr z, .done
+  dec [hl]
+  dec [hl]
+  jr .done
+.check_down
+  ld a, b
+  and BUTTON_DOWN
+  jr z, .done
+  ld a, [rSCY]
+  cp 112
+  jr z, .done
+  inc [hl]
+  inc [hl]
+.done
   ret
 
 ; ------------------------------------------------------------------------------
