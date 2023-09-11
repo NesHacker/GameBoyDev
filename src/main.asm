@@ -75,6 +75,11 @@ UpdateOnigiriSprites:
   ld a, [hli]
   ld e, a
   ld a, [de]
+  ; This math below looks complex but what it's basically doing is swapping
+  ; C <-> E and D <-> F in the low nibble of the tile value. This works out
+  ; tiles for each of the frames are two positions away from one another either
+  ; direction. This is basically just a bitwise op way to handle an add two and
+  ; mod by 4.
   and $0F
   sub $0C
   add 2
