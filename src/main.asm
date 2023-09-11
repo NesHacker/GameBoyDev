@@ -1,11 +1,15 @@
 INCLUDE "hardware.inc"
+INCLUDE "joypad.inc"
 
-DEF ary_SpriteOAM EQU $C100
-DEF len_SpriteOAM EQU 160
+DEF mask_JoypadDown EQU $C020
+DEF mask_JoypadPressed EQU $C021
 
 DEF i_BgTimer EQU $C080
 DEF i_BgFrame EQU $C081
 DEF BgDelay EQU 18
+
+DEF ary_SpriteOAM EQU $C100
+DEF len_SpriteOAM EQU 160
 
 DEF ary_Onigiri EQU $C300
 
@@ -35,9 +39,9 @@ Main:
   jp c, .vblank_wait
   call GameLoop
   jp .loop
-
 GameLoop:
   call AnimateBackground
+  call ReadJoypad
   ret
 
 ; ------------------------------------------------------------------------------
@@ -94,6 +98,39 @@ UpdateOnigiriSprites:
 .return
   ret
 
+ReadJoypad:
+  ; Read the "down" mask from the last frame
+  ld a, [mask_JoypadDown]
+  ld c, a
+  ; Read the current controller buttons and store them into the "down" mask
+  ld a, $20
+  ld [rP1], a
+  ld a, [rP1]
+  ld a, [rP1]
+  and $0F
+  ld b, a
+  ld a, $10
+  ld [rP1], a
+  ld a, [rP1]
+  ld a, [rP1]
+  ld a, [rP1]
+  ld a, [rP1]
+  ld a, [rP1]
+  ld a, [rP1]
+  sla a
+  sla a
+  sla a
+  sla a
+  or b
+  xor $FF
+  ld [mask_JoypadDown], a
+  ; Update the "just pressed" mask
+  ld b, a
+  ld a, c
+  xor b
+  and b
+  ld [mask_JoypadPressed], a
+  ret
 
 SECTION "Setup", ROM0
 

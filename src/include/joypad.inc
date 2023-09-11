@@ -1,0 +1,12 @@
+/*
+ * Joypad related macros and constants.
+ */
+
+DEF BUTTON_RIGHT  EQU 1 << 0
+DEF BUTTON_LEFT   EQU 1 << 1
+DEF BUTTON_UP     EQU 1 << 2
+DEF BUTTON_DOWN   EQU 1 << 3
+DEF BUTTON_A      EQU 1 << 4
+DEF BUTTON_B      EQU 1 << 5
+DEF BUTTON_SELECT EQU 1 << 6
+DEF BUTTON_START  EQU 1 << 7
