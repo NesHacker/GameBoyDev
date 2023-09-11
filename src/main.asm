@@ -1,19 +1,6 @@
+INCLUDE "game.inc"
 INCLUDE "hardware.inc"
 INCLUDE "joypad.inc"
-
-DEF mask_JoypadDown EQU $C020
-DEF mask_JoypadPressed EQU $C021
-
-DEF i_BgTimer EQU $C080
-DEF i_BgFrame EQU $C081
-DEF BgDelay EQU 18
-
-DEF ary_SpriteOAM EQU $C100
-DEF len_SpriteOAM EQU 160
-
-DEF ary_Onigiri EQU $C300
-
-DEF ary_LevelData EQU $D000
 
 SECTION "Header", ROM0[$100]
   jp Main
@@ -30,15 +17,17 @@ SECTION "Main", ROM0
 Main:
   call SetupGame
 .loop
-  ld a, [rLY]
-  cp 144
-  jp nc, .loop
-.vblank_wait
-  ld a, [rLY]
-  cp 144
-  jp c, .vblank_wait
+  WaitForVblank
   call GameLoop
+  WaitForVblankEnd
   jp .loop
+
+; ------------------------------------------------------------------------------
+; `func GameLoop()`
+;
+; The main loop function for the game. This is called every frame at the start
+; of the LCD vertical blanking period.
+; ------------------------------------------------------------------------------
 GameLoop:
   call AnimateBackground
   call ReadJoypad
@@ -46,155 +35,43 @@ GameLoop:
   ret
 
 ; ------------------------------------------------------------------------------
-; `func FreeMoveCamera()`
-;
-; This is a test function to move the camera window incrementally based on the
-; current joypad directional inputs.
-; ------------------------------------------------------------------------------
-FreeMoveCamera:
-  ld hl, rSCX
-  ld a, [mask_JoypadDown]
-  ld b, a
-  and BUTTON_RIGHT
-  jr z, .check_left
-  inc [hl]
-  inc [hl]
-  jr .check_up
-.check_left
-  ld a, b
-  and BUTTON_LEFT
-  jr z, .check_up
-  dec [hl]
-  dec [hl]
-.check_up
-  ld hl, rSCY
-  ld a, b
-  and BUTTON_UP
-  jr z, .check_down
-  ld a, [rSCY]
-  cp 0
-  jr z, .done
-  dec [hl]
-  dec [hl]
-  jr .done
-.check_down
-  ld a, b
-  and BUTTON_DOWN
-  jr z, .done
-  ld a, [rSCY]
-  cp 112
-  jr z, .done
-  inc [hl]
-  inc [hl]
-.done
-  ret
-
-; ------------------------------------------------------------------------------
-; `func AnimateBg()`
-;
-; Handles timing and updates for background animations.
-; ------------------------------------------------------------------------------
-AnimateBackground:
-  ld a, [i_BgTimer]
-  dec a
-  ld [i_BgTimer], a
-  jp nz, .skip
-  ld a, BgDelay
-  ld [i_BgTimer], a
-  ld a, [i_BgFrame]
-  xor 1
-  ld [i_BgFrame], a
-  call UpdateOnigiriSprites
-.skip
-  ret
-
-; ------------------------------------------------------------------------------
-; `func UpdateOnigiriSprites`
-;
-; Animates the onigiri sprites in the background by swapping between the two
-; tilesets.
-; ------------------------------------------------------------------------------
-UpdateOnigiriSprites:
-  ld hl, ary_Onigiri
-.update_loop
-  ld a, [hli]
-  or 0
-  jr z, .return
-  ld d, a
-  ld a, [hli]
-  ld e, a
-  ld a, [de]
-  ; This math below looks complex but what it's basically doing is swapping
-  ; C <-> E and D <-> F in the low nibble of the tile value. This works out
-  ; tiles for each of the frames are two positions away from one another either
-  ; direction. This is basically just a bitwise op way to handle an add two and
-  ; mod by 4.
-  and $0F
-  sub $0C
-  add 2
-  and $03
-  add $0C
-  ld b, a
-  ld a, [de]
-  and $F0
-  or b
-  ld [de], a
-  jr .update_loop
-.return
-  ret
-
-ReadJoypad:
-  ; Read the "down" mask from the last frame
-  ld a, [mask_JoypadDown]
-  ld c, a
-  ; Read the current controller buttons and store them into the "down" mask
-  ld a, $20
-  ld [rP1], a
-  ld a, [rP1]
-  ld a, [rP1]
-  and $0F
-  ld b, a
-  ld a, $10
-  ld [rP1], a
-  ld a, [rP1]
-  ld a, [rP1]
-  ld a, [rP1]
-  ld a, [rP1]
-  ld a, [rP1]
-  ld a, [rP1]
-  sla a
-  sla a
-  sla a
-  sla a
-  or b
-  xor $FF
-  ld [mask_JoypadDown], a
-  ; Update the "just pressed" mask
-  ld b, a
-  ld a, c
-  xor b
-  and b
-  ld [mask_JoypadPressed], a
-  ret
-
-SECTION "Setup", ROM0
-
-; ------------------------------------------------------------------------------
 ; `func SetupGame()`
 ;
 ; Initializes various RAM and register locations prior to game start.
 ; ------------------------------------------------------------------------------
 SetupGame:
-  ; Disable audio, wait for a VBLANK, and turn off the LCD
+  ; Disable audio (no music for this game, sorry!)
   ld a, 0
   ld [rNR52], a
-: ld a, [rLY]
-  cp a, 144
-  jp c, :-
+  ; Disable the LCD
+  WaitForVblank
   ld a, 0
   ld [rLCDC], a
+  ; Call various initialization routines
+  call ClearWRAM
+  call WriteDMARoutine
+  call LoadLevel
+  ; Transfer the sprite data using DMA
+  call DMATransfer
+  ; Initialize the screen position
+  ld a, 112
+  ld [rSCY], a
+  ; Initialize the background and sprite palettes
+  ld a, %11100100
+  ld [rBGP], a
+  ld [rOBP0], a
+  ld [rOBP1], a
+  ; Set up the LCD and start rendering
+  ld a, LCDCF_ON | LCDCF_BGON | LCDCF_OBJON | LCDCF_OBJ16
+  ld [rLCDC], a
+  ret
 
-  ; Clear WRAM
+; ------------------------------------------------------------------------------
+; `func ClearWRAM()`
+;
+; Clears all working RAM from `$C000` through `$DFFF` by setting each byte to 0.
+; ------------------------------------------------------------------------------
+ClearWRAM:
   ld bc, $2000
   ld hl, $C000
 .clear_loop
@@ -204,42 +81,6 @@ SetupGame:
   ld a, b
   or a, c
   jr nz, .clear_loop
-
-  ; Load the DMA Transfer Routine
-  call LoadDMARoutine
-
-  ; Load all level related data
-  call LoadLevelData
-
-  ; Intialize the two frame animator for onigiri sprites
-  ld a, BgDelay
-  ld [i_BgTimer], a
-  ld a, 0
-  ld [i_BgFrame], a
-
-  ; Clear the Sprite OAM data
-  ld a, 0
-  ld b, len_SpriteOAM
-  ld hl, ary_SpriteOAM
-.sprite_clear_loop
-  ld [hli], a
-  dec b
-  jr nz, .sprite_clear_loop
-
-  ; Transfer the sprite data using DMA
-  call DMATransfer
-
-  ; Initialize the screen position
-  ld a, 112
-  ld [rSCY], a
-
-  ; Turn the LCD back on and initialize display registers
-  ld a, LCDCF_ON | LCDCF_BGON | LCDCF_OBJON | LCDCF_OBJ16
-  ld [rLCDC], a
-  ld a, %11100100
-  ld [rBGP], a
-  ld [rOBP0], a
-  ld [rOBP1], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -252,7 +93,7 @@ SetupGame:
 ; - `de` - The start address for retrieving the bytes from the ROM
 ; - `hl` - The start address for storing the bytes in RAM
 ; ------------------------------------------------------------------------------
-LoadData:
+LoadData::
   ld a, [de]
   ld [hli], a
   inc de
@@ -263,71 +104,13 @@ LoadData:
   ret
 
 ; ------------------------------------------------------------------------------
-; `func LoadLevelData()`
+; `func WriteDMARoutine()`
 ;
-; Copies level data from the ROM into working and video RAM.
-; ------------------------------------------------------------------------------
-LoadLevelData:
-  ld bc, len_Tileset
-  ld de, Tileset
-  ld hl, $8000
-  call LoadData
-  ld bc, len_LevelTilemap
-  ld de, LevelTilemap
-  ld hl, $9800
-  call LoadData
-  ld bc, len_LevelData
-  ld de, LevelData
-  ld hl, ary_LevelData
-  call LoadData
-  call FindOnigiri
-  ret
-
-; ------------------------------------------------------------------------------
-; `func FindOnigiri()`
-;
-; Finds the addresses for all background tiles that depict onigiri so they can
-; be animated quickly in the main game loop. Normally this list would be
-; compiled into the level data prior, but I am just doing something simple here.
-; ------------------------------------------------------------------------------
-FindOnigiri:
-  ld bc, $9800
-  ld de, LevelData
-  ld hl, ary_Onigiri
-.loop
-  ld a, [de]
-  cp a, 5
-  jr nz, .skip
-  ld a, b
-  ld [hli], a
-  ld a, c
-  ld [hli], a
-.skip
-  inc de
-  inc bc
-  ld a, d
-  cp a, HIGH(LevelData + len_LevelData)
-  jr nz, .loop
-  ld a, e
-  cp a, LOW(LevelData + len_LevelData)
-  jr nz, .loop
-  ret
-
-; ------------------------------------------------------------------------------
-; `func DMATransfer()`
-;
-; Transfers sprites from WRAM to VRAM using the DMA.
-; ------------------------------------------------------------------------------
-DEF DMATransfer EQU $FF80
-
-; ------------------------------------------------------------------------------
-; `func LoadDMARoutine()`
-;
-; Loads the DMA transfer routine into memory starting at address $FF80. For
+; Writes the DMA transfer routine into memory starting at address $FF80. For
 ; more information see the explanation in the documentation for the
 ; `DMATransferRoutine` function below.
 ; ------------------------------------------------------------------------------
-LoadDMARoutine:
+WriteDMARoutine:
   ld b, DMATransferRoutineEnd - DMATransferRoutine
   ld de, DMATransferRoutine
   ld hl, DMATransfer
@@ -361,46 +144,3 @@ DMATransferRoutine:
   ei
   ret
 DMATransferRoutineEnd:
-
-SECTION "Tile data", ROM0
-
-; ------------------------------------------------------------------------------
-; `binary data Tileset`
-;
-; This is the tileset data for the game. Since it is just a demo, I was able to
-; fit all the graphics I need into the GameBoy's 6144 byte character RAM region.
-; Bigger games will need to swap out graphics during runtime based on what needs
-; to be rendered at a given time.
-; ------------------------------------------------------------------------------
-Tileset: INCBIN "tileset.gb"
-len_Tileset EQU 6144
-
-; ------------------------------------------------------------------------------
-; `binary data LevelTilemap`
-;
-; This is the 32 x 32 tile data for the background tiles representing the game's
-; level. For this project I kept things simple by using the binary tilemap data
-; directly. In more advanced projects one would have much larger runs of data
-; representing levels and use an encoding scheme (e.g. run-length encoding) to
-; minimize ROM data usage.
-; ------------------------------------------------------------------------------
-LevelTilemap: INCBIN "level.tilemap"
-len_LevelTilemap EQU 1024
-
-; ------------------------------------------------------------------------------
-; `binary data LevelData`
-;
-; This contains the data that detemines how each tile in the level acts in terms
-; of gameplay. For the demo there are eight types of tiles:
-;
-; - `0`: open space
-; - `1`: obstruction (ground, pips, unbreakable blocks, etc.)
-; - `2`: platform top
-; - `3`: pipe top
-; - `4`: breakable bricks
-; - `5`: onigiri
-; - `6`: coins
-; - `7`: switch blocks
-; ------------------------------------------------------------------------------
-LevelData: INCBIN "level-data.tilemap"
-len_LevelData EQU 1024
