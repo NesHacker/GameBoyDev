@@ -1,6 +1,5 @@
 INCLUDE "game.inc"
 INCLUDE "hardware.inc"
-INCLUDE "joypad.inc"
 
 SECTION "Joypad", ROM0
 
