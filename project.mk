@@ -5,11 +5,12 @@ PADVALUE := 0xFF
 
 ## Header constants (passed to RGBFIX)
 
-# ROM version (typically starting at 0 and incremented for each published version)
+# ROM version (typically starting at 0 and incremented for each published
+# version)
 VERSION := 0
 
 # 4-ASCII letter game ID
-GAMEID := BOIL
+GAMEID := GBDV
 
 # Game title, up to 11 ASCII chars
 TITLE := GAMEBOYDEV
@@ -43,7 +44,8 @@ ROMEXT  := gb
 ASFLAGS += -h
 
 # Export all labels
-# This means they must all have unique names, but they will all show up in the .sym and .map files
+# This means they must all have unique names, but they will all show up in the
+# .sym and .map files
 # ASFLAGS += -E
 
 # Game Boy Color compatible
