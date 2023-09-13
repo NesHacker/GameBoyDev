@@ -15,23 +15,20 @@ SECTION "Main", ROM0
 ; ------------------------------------------------------------------------------
 Main:
   call SetupGame
-.loop
-  WaitForVblank
-  call GameLoop
-  WaitForVblankEnd
-  jp .loop
 
 ; ------------------------------------------------------------------------------
 ; `func GameLoop()`
 ;
-; The main loop function for the game. This is called every frame at the start
-; of the LCD vertical blanking period.
+; The main loop for the game that handles all logic and rendering.
 ; ------------------------------------------------------------------------------
 GameLoop:
-  call AnimateBackground
+  WaitForVblank
   call ReadJoypad
-  call FreeMoveCamera
-  ret
+  call UpdatePlayer
+  call AnimateBackground
+  ; call FreeMoveCamera
+  WaitForVblankEnd
+  jp GameLoop
 
 ; ------------------------------------------------------------------------------
 ; `func SetupGame()`
@@ -50,6 +47,8 @@ SetupGame:
   call ClearWRAM
   call WriteDMARoutine
   call LoadLevel
+  call InitializePlayer
+
   ; Transfer the sprite data using DMA
   call DMATransfer
   ; Initialize the screen position
