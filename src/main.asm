@@ -27,6 +27,8 @@ GameLoop:
   call UpdatePlayer
   call AnimateBackground
   ; call FreeMoveCamera
+
+  call DMATransfer
   WaitForVblankEnd
   jp GameLoop
 
@@ -51,9 +53,7 @@ SetupGame:
 
   ; Transfer the sprite data using DMA
   call DMATransfer
-  ; Initialize the screen position
-  ld a, 112
-  ld [rSCY], a
+
   ; Initialize the background and sprite palettes
   ld a, %11100100
   ld [rBGP], a
