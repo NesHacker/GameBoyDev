@@ -23,6 +23,12 @@ DEF HEADING_RIGHT EQU 0
 ; Represents the player facing the left on the screen.
 DEF HEADING_LEFT EQU 1
 
+; Vertical velocity to apply right at the start of a jump
+DEF INITIAL_JUMP_VELOCITY EQU $C8
+
+; Maximum speed the character can fall
+DEF MAX_FALL_SPEED EQU $40
+
 ; The state of the player (idle, running, airborne, etc.)
 DEF b_playerState EQU $CC00
 
@@ -56,7 +62,10 @@ DEF f_screenX EQU $CC0B
 ; Y-coordinate for the screen.
 DEF f_screenY EQU $CC0C
 
+; Walk/run animation timer.
 DEF b_animationTimer EQU $CC0D
+
+; Walk/run animation frame.
 DEF b_animationFrame EQU $CC0E
 
 SECTION "Player", ROM0
@@ -70,8 +79,15 @@ SECTION "Player", ROM0
 InitializePlayer::
   DEF INITIAL_STATE equ STATE_IDLE
   DEF INITIAL_HEADING equ HEADING_RIGHT
+
   DEF INITIAL_X EQU 63
+  DEF INITIAL_X_LO EQU $F0
+  DEF INITIAL_X_HI EQU $03
+
   DEF INITIAL_Y EQU 208
+  DEF INITIAL_Y_HI EQU $0D
+  DEF INITIAL_Y_LO EQU $00
+
   DEF INITIAL_SCREEN_X EQU 12 ;0
   DEF INITIAL_SCREEN_Y EQU 104 ;112
   DEF INITIAL_SPRITE_Y EQU INITIAL_Y - INITIAL_SCREEN_Y
@@ -80,23 +96,40 @@ InitializePlayer::
   ; Initialize Player State
   ld a, INITIAL_STATE
   ld [b_playerState], a
+
   ld a, INITIAL_HEADING
   ld [b_playerHeading], a
+
   ld hl, f_playerX
-  ld a, INITIAL_X
+
+  ld a, INITIAL_X_LO
   ld [hli], a
+  ld a, INITIAL_X_HI
+  ld [hli], a
+
   ld a, 0
+  ld [hli], a   ; f_playerVelocityX = 0
+  ld [hli], a   ; f_targetVelocityX = 0
+
+  ; f_playerY
+  ld a, INITIAL_Y_LO
   ld [hli], a
-  ld [hli], a ; f_playerVelocityX
+  ld a, INITIAL_Y_HI
   ld [hli], a
-  ld [hli], a ; f_targetVelocityX
-  ld [hli], a
-  ld a, INITIAL_Y
-  ld [hli], a
+
   ld a, 0
-  ld [hli], a
   ld [hli], a ; f_playerVelocityY
-  ld [hli], a
+
+
+  ld a, INITIAL_SPRITE_X
+  ld [b_spriteX], a
+
+  ld a, INITIAL_SPRITE_Y
+  ld [b_spriteY], a
+
+
+  ; TODO Init fixed point screen coordinates
+
 
   ; Initialize the screen position
   ld a, INITIAL_SCREEN_X
@@ -139,13 +172,114 @@ InitializePlayer::
 ; based on button input and world state.
 ; ------------------------------------------------------------------------------
 UpdatePlayer::
+  call UpdateVerticalMotion
   call SetTargetVelocityX
   call AccelerateX
   call ApplyVelocityX
-
   call UpdateSprite
-
   ret
+
+; ------------------------------------------------------------------------------
+; `func UpdateVerticalMotion()`
+;
+; Updates player state for vertical motion (jumping and falling).
+; ------------------------------------------------------------------------------
+UpdateVerticalMotion:
+  ld a, [b_playerState]
+  cp STATE_AIRBORNE
+  jr z, .airborne
+.check_jump
+  ld a, [b_JoypadPressed]
+  and BUTTON_A
+  jr nz, .begin_jump
+  ld a, 0
+  ld [f_playerVelocityY], a
+  ret
+.begin_jump
+  ld a, INITIAL_JUMP_VELOCITY
+  ld [f_playerVelocityY], a
+  ld a, STATE_AIRBORNE
+  ld [b_playerState], a
+  ret
+.airborne
+  call AccelerateY
+  call ApplyVelocityY
+  call BoundPositionY
+  ret
+
+; ------------------------------------------------------------------------------
+; `func AccelerateY()`
+;
+; Updates the vertical velocity based on controller input and player state.
+; ------------------------------------------------------------------------------
+AccelerateY:
+  ld b, 5
+  ld a, [f_playerVelocityY]
+  cp $E0
+  jr nc, .decelerate
+  ld a, [b_JoypadDown]
+  and BUTTON_A
+  jr z, .decelerate
+  ld b, 1
+.decelerate
+  ld a, [f_playerVelocityY]
+  add a, b
+  ld c, a
+  and %1000_0000
+  jr nz, .store_velocity
+.check_falling_speed
+  ld a, c
+  cp MAX_FALL_SPEED
+  jr c, .store_velocity
+  ld c, MAX_FALL_SPEED
+.store_velocity
+  ld a, c
+  ld [f_playerVelocityY], a
+  ret
+
+; ------------------------------------------------------------------------------
+; `func ApplyVelocityY()`
+;
+; Applies vertical velocity to move the player through the game world.
+; ------------------------------------------------------------------------------
+ApplyVelocityY:
+  ld a, [f_playerVelocityY]
+  ld hl, f_playerY
+  jp ApplyVelocity
+
+; ------------------------------------------------------------------------------
+; Bounds the player's vertical position.
+; ------------------------------------------------------------------------------
+BoundPositionY:
+  ; Convert 12.4 fixed point into world coordinates
+  ld a, [f_playerY + 1]
+  ld b, a
+  ld a, [f_playerY]
+  srl b
+  rr a
+  srl b
+  rr a
+  srl b
+  rr a
+  srl b
+  rr a
+  cp INITIAL_Y
+  jr nc, .land
+  ; TODO: This will need to change with screen scrolling
+  sub INITIAL_SCREEN_Y
+  ld [b_spriteY], a
+  ret
+.land
+  ld a, INITIAL_SPRITE_Y
+  ld [b_spriteY], a
+  ld a, INITIAL_Y_LO
+  ld [f_playerY], a
+  ld a, INITIAL_Y_HI
+  ld [f_playerY+1], a
+  ld a, STATE_IDLE
+  ld [b_playerState], a
+  ret
+
 
 ; ------------------------------------------------------------------------------
 ; `func SetTargetVelocityX()`
@@ -164,11 +298,8 @@ SetTargetVelocityX:
   ld a, d
   and a, BUTTON_RIGHT
   jr z, .check_left
-
   ld a, HEADING_RIGHT
   ld [b_playerHeading], a
-
-
   ld a, b
   ld [f_targetVelocityX], a
   ret
@@ -176,11 +307,8 @@ SetTargetVelocityX:
   ld a, d
   and a, BUTTON_LEFT
   jr z, .zero
-
   ld a, HEADING_LEFT
   ld [b_playerHeading], a
-
-
   ld a, b
   cpl
   inc a
@@ -219,8 +347,19 @@ AccelerateX:
 ; Applies the current velocity to the position to move the character.
 ; ------------------------------------------------------------------------------
 ApplyVelocityX:
-  ld hl, f_playerX
   ld a, [f_playerVelocityX]
+  ld hl, f_playerX
+  jp ApplyVelocity
+
+; ------------------------------------------------------------------------------
+; `func ApplyVelocity(a, hl)`
+;
+; Applies the given velocity to the given position state variable.
+;
+; - Param `a` - The velocity to apply.
+; - Param `hl` - Address for the position variable to modify.
+; ------------------------------------------------------------------------------
+ApplyVelocity:
   ld b, a
   and %1000_0000
   jr nz, .negative
@@ -246,12 +385,18 @@ ApplyVelocityX:
   ld [hl], a
   ret
 
+
 ; ------------------------------------------------------------------------------
 ; `func UpdateSprite()`
 ;
 ; Updates the sprite and graphics based on the player state.
 ; ------------------------------------------------------------------------------
 UpdateSprite:
+  ld a, [b_spriteY]
+  ld [ary_SpriteOAM], a
+  ld [ary_SpriteOAM + 4], a
+
+
   ld a, [f_playerX + 1]
   ld b, a
   ld a, [f_playerX]
@@ -279,7 +424,6 @@ UpdateSprite:
   ld b, a
   add $02
   ld c, a
-
 
   ld a, [b_playerHeading]
   cp HEADING_RIGHT
