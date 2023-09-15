@@ -1,6 +1,10 @@
 INCLUDE "game.inc"
 INCLUDE "hardware.inc"
 
+; ------------------------------------------------------------------------------
+; Constants and macros.
+; ------------------------------------------------------------------------------
+
 ; Player state when the character is idle.
 DEF STATE_IDLE EQU 0
 
@@ -29,8 +33,24 @@ DEF INITIAL_JUMP_VELOCITY EQU $C8
 ; Maximum speed the character can fall
 DEF MAX_FALL_SPEED EQU $40
 
+; First state for handling the idle animation
+DEF IDLE_STATE_STILL EQU 0
+
+; Second state for handling the idle animation
+DEF IDLE_STATE_BLINK EQU 1
+
+; Third state for handling the idle animation
+DEF IDLE_STATE_STILL2 EQU 2
+
+; Last state for handling the idle animation
+DEF IDLE_STATE_BLINK2 EQU 3
+
+; ------------------------------------------------------------------------------
+; Variable memory locations.
+; ------------------------------------------------------------------------------
+
 ; The state of the player (idle, running, airborne, etc.)
-DEF b_playerState EQU $CC00
+DEF b_motionState EQU $CC00
 
 ; The direction the player is facing.
 DEF b_playerHeading EQU $CC01
@@ -68,6 +88,12 @@ DEF b_animationTimer EQU $CC0D
 ; Walk/run animation frame.
 DEF b_animationFrame EQU $CC0E
 
+; Idle animation state
+DEF b_idleState EQU $CC0F
+
+; Idle animation timer
+DEF b_idleTimer EQU $CC10
+
 SECTION "Player", ROM0
 
 ; ------------------------------------------------------------------------------
@@ -95,7 +121,7 @@ InitializePlayer::
 
   ; Initialize Player State
   ld a, INITIAL_STATE
-  ld [b_playerState], a
+  ld [b_motionState], a
 
   ld a, INITIAL_HEADING
   ld [b_playerHeading], a
@@ -163,6 +189,12 @@ InitializePlayer::
   ld a, 12
   ld [b_animationTimer], a
 
+  ; Initialize the idle timer and state
+  ld a, [idle_timer_durations]
+  ld [b_idleTimer], a
+  ld a, IDLE_STATE_STILL
+  ld [b_idleState], a
+
   ret
 
 ; ------------------------------------------------------------------------------
@@ -185,7 +217,7 @@ UpdatePlayer::
 ; Updates player state for vertical motion (jumping and falling).
 ; ------------------------------------------------------------------------------
 UpdateVerticalMotion:
-  ld a, [b_playerState]
+  ld a, [b_motionState]
   cp STATE_AIRBORNE
   jr z, .airborne
 .check_jump
@@ -199,7 +231,7 @@ UpdateVerticalMotion:
   ld a, INITIAL_JUMP_VELOCITY
   ld [f_playerVelocityY], a
   ld a, STATE_AIRBORNE
-  ld [b_playerState], a
+  ld [b_motionState], a
   ret
 .airborne
   call AccelerateY
@@ -277,7 +309,7 @@ BoundPositionY:
   ld a, INITIAL_Y_HI
   ld [f_playerY+1], a
   ld a, STATE_IDLE
-  ld [b_playerState], a
+  ld [b_motionState], a
   ret
 
 
@@ -298,8 +330,6 @@ SetTargetVelocityX:
   ld a, d
   and a, BUTTON_RIGHT
   jr z, .check_left
-  ld a, HEADING_RIGHT
-  ld [b_playerHeading], a
   ld a, b
   ld [f_targetVelocityX], a
   ret
@@ -307,8 +337,6 @@ SetTargetVelocityX:
   ld a, d
   and a, BUTTON_LEFT
   jr z, .zero
-  ld a, HEADING_LEFT
-  ld [b_playerHeading], a
   ld a, b
   cpl
   inc a
@@ -392,15 +420,26 @@ ApplyVelocity:
 ; Updates the sprite and graphics based on the player state.
 ; ------------------------------------------------------------------------------
 UpdateSprite:
+  call UpdateMotionState
+  call UpdateAnimationFrame
+  call UpdateHeading
+  call UpdateIdleState
+  call UpdateSpriteTiles
+  call UpdateSpritePosition
+  ret
+
+; ------------------------------------------------------------------------------
+; `func UpdateSpritePosition()`
+;
+; Updates the player sprite position on the screen.
+; ------------------------------------------------------------------------------
+UpdateSpritePosition:
   ld a, [b_spriteY]
   ld [ary_SpriteOAM], a
   ld [ary_SpriteOAM + 4], a
-
-
   ld a, [f_playerX + 1]
   ld b, a
   ld a, [f_playerX]
-
   srl b
   rr a
   srl b
@@ -409,44 +448,71 @@ UpdateSprite:
   rr a
   srl b
   rr a
-
   ld [b_spriteX], a
   ld [ary_SpriteOAM + 1], a
   add a, 8
   ld [ary_SpriteOAM + 5], a
+  ret
 
-  call UpdateAnimationFrame
-
-  ld a, [b_animationFrame]
-  sla a
-  sla a
-  add $20
+; ------------------------------------------------------------------------------
+; `func UpdateMotionState()`
+;
+; Updates the motion state based on target and current velocity.
+; ------------------------------------------------------------------------------
+UpdateMotionState:
+  ld a, [b_motionState]
+  cp STATE_AIRBORNE
+  jr nz, .grounded
+  ret
+.grounded
+  ; If T = V:
+  ;   // Steady motion
+  ;   If T == 0: STILL
+  ;   Else: WALK
+  ; If T <> V:
+  ;   // Accelerating
+  ;   If <- or -> being pressed:
+  ;     If T > 0 && V < 0: PIVOT
+  ;     If T < 0 && V > 0: PIVOT
+  ;   Else: WALK
+  ld hl, f_targetVelocityX
+  ld a, [f_targetVelocityX]
+  cp a, [hl]
+.steady
+  cp a, 0
+  jr nz, .walk
+.still
+  ld a, STATE_IDLE
+  ld [b_motionState], a
+  ret
+.accelerating
+  ld a, [b_JoypadDown]
   ld b, a
-  add $02
-  ld c, a
-
-  ld a, [b_playerHeading]
-  cp HEADING_RIGHT
-  jr nz, .face_left
-.face_right
-  ld a, b
-  ld [ary_SpriteOAM + 2], a
-  ld a, c
-  ld [ary_SpriteOAM + 6], a
-  ld a, 0
-  ld [ary_SpriteOAM + 3], a
-  ld [ary_SpriteOAM + 7], a
+  ld a, BUTTON_LEFT
+  or BUTTON_RIGHT
+  and b
+  jr z, .walk
+  ld a, [f_targetVelocityX]
+  and %1000_0000
+  ld b, a
+  ld a, [f_playerVelocityX]
+  and %1000_0000
+  cp a, b
+  jr z, .walk
+.pivot
+  ld a, STATE_PIVOT
+  ld [b_motionState], a
   ret
-.face_left
-  ld a, c
-  ld [ary_SpriteOAM + 2], a
-  ld a, b
-  ld [ary_SpriteOAM + 6], a
-  ld a, %0010_0000
-  ld [ary_SpriteOAM + 3], a
-  ld [ary_SpriteOAM + 7], a
+.walk
+  ld a, STATE_WALKING
+  ld [b_motionState], a
   ret
 
+; ------------------------------------------------------------------------------
+; `func UpdateAnimationFrame()`
+;
+; Updates the animation frame based on motion state and velocity.
+; ------------------------------------------------------------------------------
 UpdateAnimationFrame:
   ld a, [f_playerVelocityX]
   or a
@@ -486,3 +552,135 @@ delay_by_velocity:
 DB 12, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10
 DB 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7
 DB 6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4
+
+; ------------------------------------------------------------------------------
+; `func UpdateHeading()`
+;
+; Updates the player's heading based on current velocity.
+; ------------------------------------------------------------------------------
+UpdateHeading:
+  ld a, [f_targetVelocityX]
+  cp 0
+  jr nz, .check_heading
+  ret
+.check_heading
+  rlc a
+  and 1
+  ld b, a
+  ld a, [b_playerHeading]
+  cp b
+  jr nz, .update_heading
+  ret
+.update_heading
+  ld a, b
+  ld [b_playerHeading], a
+  ld a, [ary_SpriteOAM + 3]
+  xor %0010_0000
+  ld [ary_SpriteOAM + 3], a
+  ld [ary_SpriteOAM + 7], a
+  ret
+
+; ------------------------------------------------------------------------------
+; `func UpdateIdleState()`
+;
+; Updates the idle animation state based on the motion state and timers.
+; ------------------------------------------------------------------------------
+UpdateIdleState:
+  ld a, [b_motionState]
+  cp STATE_IDLE
+  jr z, .update_timer
+  ld a, [idle_timer_durations]
+  ld [b_idleTimer], a
+  ld a, IDLE_STATE_STILL
+  ld [b_idleState], a
+  ret
+.update_timer
+  ld a, [b_idleTimer]
+  dec a
+  jr z, .update_state
+  ld [b_idleTimer], a
+  ret
+.update_state
+  ld a, [b_idleState]
+  inc a
+  cp 4
+  jr nz, .set_state
+  ld a, 0
+.set_state
+  ld [b_idleState], a
+  ld l, a
+  ld h, 0
+  ld de, idle_timer_durations
+  add hl, de
+  ld a, [hl]
+  ld [b_idleTimer], a
+  ret
+
+idle_timer_durations:
+  DB 245, 10, 10, 10
+
+; ------------------------------------------------------------------------------
+; `func UpdateSpriteTiles()`
+;
+; Updates the player sprite tiles based the current motion and animation state.
+; ------------------------------------------------------------------------------
+UpdateSpriteTiles:
+  ld a, [b_motionState]
+  cp STATE_AIRBORNE
+  jr z, .airborne
+  cp STATE_PIVOT
+  jr z, .pivot
+  cp STATE_WALKING
+  jr z, .walk
+.still
+  ld a, [b_idleState]
+  sla a
+  sla a
+  ld b, a
+  ld a, [b_playerHeading]
+  add b
+  ld de, idle_tiles
+  jr .set_tiles
+  ret
+.airborne
+  ld a, [b_playerHeading]
+  ld de, jumping_tiles
+  jr .set_tiles
+  ret
+.walk
+  ld a, [b_animationFrame]
+  sla a
+  sla a
+  ld b, a
+  ld a, [b_playerHeading]
+  add b
+  ld de, walk_tiles
+  jr .set_tiles
+  ret
+.pivot
+  ld a, [b_playerHeading]
+  ld de, pivot_tiles
+.set_tiles
+  ld l, a
+  ld h, 0
+  add hl, de
+  ld a, [hl]
+  ld [ary_SpriteOAM + 2], a
+  inc hl
+  inc hl
+  ld a, [hl]
+  ld [ary_SpriteOAM + 6], a
+  ret
+
+jumping_tiles:
+  DB $28, $2A, $2A, $28
+pivot_tiles:
+  DB $38, $3A, $3A, $38
+walk_tiles:
+  DB $20, $22, $22, $20
+  DB $24, $26, $26, $24
+idle_tiles:
+  DB $20, $22, $22, $20
+  DB $3C, $3E, $3E, $3C
+  DB $20, $22, $22, $20
+  DB $3C, $3E, $3E, $3C
