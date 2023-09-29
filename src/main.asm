@@ -25,7 +25,11 @@ GameLoop:
   WaitForVblank
   call ReadJoypad
   call UpdatePlayer
-  call AnimateBackground
+
+  ; TODO: Change background animation to sprite animation...
+  ; call AnimateBackground
+
+  ; TODO: Remove "FreeMoveCamera" code entirely...
   ; call FreeMoveCamera
 
   call DMATransfer
