@@ -502,6 +502,7 @@ UpdateMotionState:
   ld a, [b_motionState]
   cp STATE_AIRBORNE
   jr nz, .grounded
+.airborne
   ret
 .grounded
   ; If T = V:
@@ -514,9 +515,10 @@ UpdateMotionState:
   ;     If T > 0 && V < 0: PIVOT
   ;     If T < 0 && V > 0: PIVOT
   ;   Else: WALK
-  ld hl, f_targetVelocityX
   ld a, [f_targetVelocityX]
+  ld hl, f_playerVelocityX
   cp a, [hl]
+  jr nz, .accelerating
 .steady
   cp a, 0
   jr nz, .walk
