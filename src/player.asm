@@ -1,6 +1,18 @@
 INCLUDE "game.inc"
 INCLUDE "hardware.inc"
 
+/*
+TODO This module needs to be broken down into various sub-modules to handle
+     movement and positioning, hit detection and bound checking, sprite and
+     graphics.
+
+TODO Ideally the movement & bounds checking code would be executed immediately
+     after rendering has been completed during the VBLANK. This provides a lot
+     more time to perform calulation since they don't have to fit in the 1.09ms
+     VBLANK interval (the rest of the screen takes 15.66ms to render, so yeah
+     we can do a heck of a lot more in that time).
+*/
+
 ; ------------------------------------------------------------------------------
 ; Constants and macros.
 ; ------------------------------------------------------------------------------
@@ -86,11 +98,11 @@ DEF b_spriteX EQU $CC09
 ; Y-coordinate for the player's sprite.
 DEF b_spriteY EQU $CC0A
 
-; X-coordinate for the screen.
-DEF f_screenX EQU $CC0B
+; Player's integer x-coordinate in world coordinates.
+DEF f_worldX EQU $CC0B
 
-; Y-coordinate for the screen.
-DEF f_screenY EQU $CC0C
+; Player's integer y-coordinate in world coordinates.
+DEF f_worldY EQU $CC0C
 
 ; Walk/run animation timer.
 DEF b_animationTimer EQU $CC0D
@@ -115,20 +127,22 @@ SECTION "Player", ROM0
 ; Initializes the state for the player and sets up sprites for rendering the
 ; character.
 ; ------------------------------------------------------------------------------
+; TODO This method requires extensive refactoring.
+; ------------------------------------------------------------------------------
 InitializePlayer::
   DEF INITIAL_STATE equ STATE_IDLE
   DEF INITIAL_HEADING equ HEADING_RIGHT
 
-  DEF INITIAL_X EQU 63
-  DEF INITIAL_X_LO EQU $F0
-  DEF INITIAL_X_HI EQU $03
+  DEF INITIAL_X EQU 20
+  DEF INITIAL_X_LO EQU $C0
+  DEF INITIAL_X_HI EQU $01
 
   DEF INITIAL_Y EQU 208
   DEF INITIAL_Y_HI EQU $0D
   DEF INITIAL_Y_LO EQU $00
 
-  DEF INITIAL_SCREEN_X EQU 12 ;0
-  DEF INITIAL_SCREEN_Y EQU 104 ;112
+  DEF INITIAL_SCREEN_X EQU 0
+  DEF INITIAL_SCREEN_Y EQU 112
   DEF INITIAL_SPRITE_Y EQU INITIAL_Y - INITIAL_SCREEN_Y
   DEF INITIAL_SPRITE_X EQU INITIAL_X - INITIAL_SCREEN_X
 
@@ -217,12 +231,45 @@ InitializePlayer::
 ; Called every frame to update the player state (e.g. position, velcoity, etc.)
 ; based on button input and world state.
 ; ------------------------------------------------------------------------------
+; TODO Clean up the code here once the scrolling implementation is working.
+; ------------------------------------------------------------------------------
 UpdatePlayer::
   call UpdateVerticalMotion
   call SetTargetVelocityX
   call AccelerateX
   call ApplyVelocityX
+  call ConvertWorldCoordinates
   call UpdateSprite
+  call ScrollScreen
+  ret
+
+; ------------------------------------------------------------------------------
+; `func FixedPointToInt(hl)`
+;
+; Converts a 12.4 fixed point value to an 8-bit integer and stores the result in
+; the `a` register.
+;
+; - Param `hl` - The address to the low byte of the 12.4 fixed point value to be
+;   converted.
+; - Return `a` - The converted value.
+; ------------------------------------------------------------------------------
+FixedPointToInt:
+  inc hl
+  ld a, [hld]
+  ld b, a
+  ld a, [hl]
+  ld a, [f_playerX + 1]
+  ld b, a
+  ld a, [f_playerX]
+  srl b
+  rr a
+  srl b
+  rr a
+  srl b
+  rr a
+  srl b
+  rr a
+  ld [f_worldX], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -305,6 +352,8 @@ ApplyVelocityY:
 
 ; ------------------------------------------------------------------------------
 ; Bounds the player's vertical position.
+; ------------------------------------------------------------------------------
+; TODO This will need to be completely overhauled when we add hit detection.
 ; ------------------------------------------------------------------------------
 BoundPositionY:
   ; Convert 12.4 fixed point into world coordinates
@@ -439,7 +488,16 @@ ApplyVelocityX:
 ; - Param `a` - The velocity to apply.
 ; - Param `hl` - Address for the position variable to modify.
 ; ------------------------------------------------------------------------------
+; TODO: The bounding code will probably need to be broken out into its own
+;       routine upon implementing hit detection.
+; ------------------------------------------------------------------------------
 ApplyVelocity:
+  ; Character cannot move beyond dot 240 otherwise their sprite would fall off
+  ; the screen (this the case for both axes). The decimal value of 240 is equal
+  ; to $F0 in hexadecimal, and in 12.4 fixed point this is shifted across two
+  ; bytes: $0F $00.
+  DEF MAX_VALUE_LO EQU $00
+  DEF MAX_VALUE_HI EQU $0F
   ld b, a
   cp a, 0
   jr nz, .check_negative
@@ -452,8 +510,24 @@ ApplyVelocity:
   ld a, b
   add [hl]
   ld [hli], a
+  ld c, a
   ld a, 0
   adc [hl]
+  ld [hl], a
+  ; Check to see if the value exceeds dot 240 and bound accordingly...
+  cp a, $0F
+  jr z, .check_lo_byte
+  jr nc, .bound_above
+  ret
+.check_lo_byte
+  ld a, c
+  cp $00
+  jr nz, .bound_above
+  ret
+.bound_above
+  ld a, $0F
+  ld [hld], a
+  ld a, $00
   ld [hl], a
   ret
 .negative
@@ -467,8 +541,31 @@ ApplyVelocity:
   ld a, [hl]
   sbc 0
   ld [hl], a
+  ; For left and top bounding, just check if the result is negative and set the
+  ; value to 0 if that is the case.
+  and a, %1000_0000
+  jr nz, .bound_below
+  ret
+.bound_below
+  ld a, 0
+  ld [hld], a
+  ld [hl], a
   ret
 
+; ------------------------------------------------------------------------------
+; `func ConvertWorldCoordinates()`
+;
+; Converts 12.4 fixed point player coordinates into integer world coordinates
+; for use when rendering the game's graphics.
+; ------------------------------------------------------------------------------
+ConvertWorldCoordinates:
+  ld hl, f_playerX
+  call FixedPointToInt
+  ld [f_worldX], a
+  ld hl, f_playerY
+  call FixedPointToInt
+  ld [f_worldY], a
+  ret
 
 ; ------------------------------------------------------------------------------
 ; `func UpdateSprite()`
@@ -482,32 +579,6 @@ UpdateSprite:
   call UpdateIdleState
   call UpdateSpriteTiles
   call UpdateSpritePosition
-  ret
-
-; ------------------------------------------------------------------------------
-; `func UpdateSpritePosition()`
-;
-; Updates the player sprite position on the screen.
-; ------------------------------------------------------------------------------
-UpdateSpritePosition:
-  ld a, [b_spriteY]
-  ld [ary_SpriteOAM], a
-  ld [ary_SpriteOAM + 4], a
-  ld a, [f_playerX + 1]
-  ld b, a
-  ld a, [f_playerX]
-  srl b
-  rr a
-  srl b
-  rr a
-  srl b
-  rr a
-  srl b
-  rr a
-  ld [b_spriteX], a
-  ld [ary_SpriteOAM + 1], a
-  add a, 8
-  ld [ary_SpriteOAM + 5], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -730,6 +801,9 @@ UpdateSpriteTiles:
   ld [ary_SpriteOAM + 6], a
   ret
 
+; ------------------------------------------------------------------------------
+; TODO Document each of these tables.
+; ------------------------------------------------------------------------------
 jumping_tiles:
   DB $28, $2A, $2A, $28
 pivot_tiles:
@@ -742,3 +816,63 @@ idle_tiles:
   DB $3C, $3E, $3E, $3C
   DB $20, $22, $22, $20
   DB $3C, $3E, $3E, $3C
+
+; ------------------------------------------------------------------------------
+; `func UpdateSpritePosition()`
+;
+; Updates the player sprite position on the screen.
+; ------------------------------------------------------------------------------
+; TODO This will probably need to be cleaned up a bunch when we handle bounds
+;      and hit detetection.
+; ------------------------------------------------------------------------------
+UpdateSpritePosition:
+  ld a, [b_spriteY]
+  ld [ary_SpriteOAM], a
+  ld [ary_SpriteOAM + 4], a
+  ld a, [f_worldX]
+  ld b, a
+  cp 80
+  jr c, .set_x
+.check_scrolling
+  cp 176
+  jr nc, .max_scroll
+  ld a, 80
+  jr .set_x
+.max_scroll
+  ld a, b
+  sub a, 96 ; TODO: Make a MAX_SCROLL_X const and use it here...
+.set_x
+  ld b, 8  ; This adds a +8 dot offset to account for how sprites are rendered.
+  add a, b
+  ld [b_spriteX], a ; TODO: Probably not needed...
+  ld [ary_SpriteOAM + 1], a
+  add a, 8
+  ld [ary_SpriteOAM + 5], a
+  ret
+
+; ------------------------------------------------------------------------------
+; `func ScrollScreen()`
+;
+; Calculates and handles screen scrolling based on the player's position in the
+; game world.
+; ------------------------------------------------------------------------------
+; TODO Handle vertical scrolling.
+; ------------------------------------------------------------------------------
+ScrollScreen:
+  ; Horizontal scrolling
+  ld hl, rSCX
+  ld b, 0
+  ld a, [f_worldX]
+  cp 80
+  jr c, .set_scroll
+.check_scrolling
+  cp 176
+  jr nc, .max_scroll
+  sub 80
+  ld b, a
+  jr .set_scroll
+.max_scroll
+  ld b, 96
+.set_scroll
+  ld [hl], b
+  ret
