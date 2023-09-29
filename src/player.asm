@@ -45,6 +45,9 @@ DEF IDLE_STATE_STILL2 EQU 2
 ; Last state for handling the idle animation
 DEF IDLE_STATE_BLINK2 EQU 3
 
+; Number of frames to allow "slow" falling while holding the A-button.
+DEF SLOW_FALL_FRAMES EQU 24
+
 ; ------------------------------------------------------------------------------
 ; Variable memory locations.
 ; ------------------------------------------------------------------------------
@@ -100,6 +103,9 @@ DEF b_idleState EQU $CC0F
 
 ; Idle animation timer
 DEF b_idleTimer EQU $CC10
+
+; Timer used for transitioning from "slow" to "fast" falling.
+DEF b_slowFallTimer EQU $CC11
 
 SECTION "Player", ROM0
 
@@ -191,7 +197,6 @@ InitializePlayer::
   ld a, 0
   ld [hli], a
 
-
   ; TODO Clean me up
   ld a, 12
   ld [b_animationTimer], a
@@ -201,6 +206,8 @@ InitializePlayer::
   ld [b_idleTimer], a
   ld a, IDLE_STATE_STILL
   ld [b_idleState], a
+  ld a, 0
+  ld [b_slowFallTimer], a
 
   ret
 
@@ -235,6 +242,8 @@ UpdateVerticalMotion:
   ld [f_playerVelocityY], a
   ret
 .begin_jump
+  ld a, SLOW_FALL_FRAMES
+  ld [b_slowFallTimer], a
   ld a, INITIAL_JUMP_VELOCITY
   ld [f_playerVelocityY], a
   ld a, STATE_AIRBORNE
@@ -253,13 +262,21 @@ UpdateVerticalMotion:
 ; ------------------------------------------------------------------------------
 AccelerateY:
   ld b, 5
-  ld a, [f_playerVelocityY]
-  cp $E0
-  jr nc, .decelerate
+  ld a, [b_slowFallTimer]
+  cp a, 0
+  jr z, .decelerate
+  dec a
+  ld [b_slowFallTimer], a
+  cp a, 0
+  jr z, .decelerate
   ld a, [b_JoypadDown]
   and BUTTON_A
-  jr z, .decelerate
+  jr z, .end_slow_fall
   ld b, 1
+  jr .decelerate
+.end_slow_fall
+  ld a, 0
+  ld [b_slowFallTimer], a
 .decelerate
   ld a, [f_playerVelocityY]
   add a, b
