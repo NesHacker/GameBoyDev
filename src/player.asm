@@ -119,6 +119,31 @@ DEF b_idleTimer EQU $CC10
 ; Timer used for transitioning from "slow" to "fast" falling.
 DEF b_slowFallTimer EQU $CC11
 
+
+; ------------------------------------------------------------------------------
+; TODO Document me!!!
+; ------------------------------------------------------------------------------
+
+DEF INITIAL_STATE equ STATE_IDLE
+DEF INITIAL_HEADING equ HEADING_RIGHT
+
+DEF INITIAL_X EQU 20
+DEF INITIAL_X_LO EQU $C0
+DEF INITIAL_X_HI EQU $01
+
+; 208 = $D0, 198 = $C6
+DEF INITIAL_Y EQU 198
+DEF INITIAL_Y_HI EQU $0C
+DEF INITIAL_Y_LO EQU $60
+
+DEF INITIAL_SCREEN_X EQU 0
+DEF INITIAL_SCREEN_Y EQU 112
+DEF INITIAL_SPRITE_Y EQU INITIAL_Y - INITIAL_SCREEN_Y
+DEF INITIAL_SPRITE_X EQU INITIAL_X - INITIAL_SCREEN_X
+
+
+
+
 SECTION "Player", ROM0
 
 ; ------------------------------------------------------------------------------
@@ -130,23 +155,6 @@ SECTION "Player", ROM0
 ; TODO This method requires extensive refactoring.
 ; ------------------------------------------------------------------------------
 InitializePlayer::
-  DEF INITIAL_STATE equ STATE_IDLE
-  DEF INITIAL_HEADING equ HEADING_RIGHT
-
-  DEF INITIAL_X EQU 20
-  DEF INITIAL_X_LO EQU $C0
-  DEF INITIAL_X_HI EQU $01
-
-  DEF INITIAL_Y EQU 208
-  DEF INITIAL_Y_HI EQU $0D
-  DEF INITIAL_Y_LO EQU $00
-
-  DEF INITIAL_SCREEN_X EQU 0
-  DEF INITIAL_SCREEN_Y EQU 112
-  DEF INITIAL_SPRITE_Y EQU INITIAL_Y - INITIAL_SCREEN_Y
-  DEF INITIAL_SPRITE_X EQU INITIAL_X - INITIAL_SCREEN_X
-
-  ; Initialize Player State
   ld a, INITIAL_STATE
   ld [b_motionState], a
 
@@ -244,35 +252,6 @@ UpdatePlayer::
   ret
 
 ; ------------------------------------------------------------------------------
-; `func FixedPointToInt(hl)`
-;
-; Converts a 12.4 fixed point value to an 8-bit integer and stores the result in
-; the `a` register.
-;
-; - Param `hl` - The address to the low byte of the 12.4 fixed point value to be
-;   converted.
-; - Return `a` - The converted value.
-; ------------------------------------------------------------------------------
-FixedPointToInt:
-  inc hl
-  ld a, [hld]
-  ld b, a
-  ld a, [hl]
-  ld a, [f_playerX + 1]
-  ld b, a
-  ld a, [f_playerX]
-  srl b
-  rr a
-  srl b
-  rr a
-  srl b
-  rr a
-  srl b
-  rr a
-  ld [f_worldX], a
-  ret
-
-; ------------------------------------------------------------------------------
 ; `func UpdateVerticalMotion()`
 ;
 ; Updates player state for vertical motion (jumping and falling).
@@ -356,35 +335,28 @@ ApplyVelocityY:
 ; TODO This will need to be completely overhauled when we add hit detection.
 ; ------------------------------------------------------------------------------
 BoundPositionY:
-  ; Convert 12.4 fixed point into world coordinates
-  ld a, [f_playerY + 1]
-  ld b, a
-  ld a, [f_playerY]
-  srl b
-  rr a
-  srl b
-  rr a
-  srl b
-  rr a
-  srl b
-  rr a
-  cp INITIAL_Y
+  ld hl, f_playerY + 1
+  ld a, [hld]
+  cp a, INITIAL_Y_HI
+  jr z, .check_low_byte
   jr nc, .land
-  ; TODO: This will need to change with screen scrolling
-  sub INITIAL_SCREEN_Y
-  ld [b_spriteY], a
+  ret
+.check_low_byte
+  ld a, [hl]
+  cp a, INITIAL_Y_LO
+  jr z, .land
+  jr nc, .land
   ret
 .land
+  ld a, INITIAL_Y_LO
+  ld [hli], a
+  ld a, INITIAL_Y_HI
+  ld [hl], a
   ld a, INITIAL_SPRITE_Y
   ld [b_spriteY], a
-  ld a, INITIAL_Y_LO
-  ld [f_playerY], a
-  ld a, INITIAL_Y_HI
-  ld [f_playerY+1], a
   ld a, STATE_IDLE
   ld [b_motionState], a
   ret
-
 
 ; ------------------------------------------------------------------------------
 ; `func SetTargetVelocityX()`
@@ -565,6 +537,31 @@ ConvertWorldCoordinates:
   ld hl, f_playerY
   call FixedPointToInt
   ld [f_worldY], a
+  ret
+
+; ------------------------------------------------------------------------------
+; `func FixedPointToInt(hl)`
+;
+; Converts a 12.4 fixed point value to an 8-bit integer and stores the result in
+; the `a` register.
+;
+; - Param `hl` - The address to the low byte of the 12.4 fixed point value to be
+;   converted.
+; - Return `a` - The converted value.
+; ------------------------------------------------------------------------------
+FixedPointToInt:
+  inc hl
+  ld a, [hld]
+  ld b, a
+  ld a, [hl]
+  srl b
+  rr a
+  srl b
+  rr a
+  srl b
+  rr a
+  srl b
+  rr a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -822,13 +819,30 @@ idle_tiles:
 ;
 ; Updates the player sprite position on the screen.
 ; ------------------------------------------------------------------------------
-; TODO This will probably need to be cleaned up a bunch when we handle bounds
-;      and hit detetection.
+; TODO This code is a mess and can be refactored significantly.
 ; ------------------------------------------------------------------------------
 UpdateSpritePosition:
+  ; Basic Vertical Positioning.
+  ld a, [f_worldY]
+  ld b, a
+  cp 80
+  jr c, .set_y
+.check_scrolling_y
+  cp 176
+  jr nc, .max_scroll_y
+  ld a, 80
+  jr .set_y
+.max_scroll_y
+  ld a, b
+  sub a, 96 ; TODO: Make a MAX_SCROLL_Y const and use it here...
+.set_y
+  ld b, 10  ; This adds a +10 dot offset to account for sprites rendering.
+  add a, b
+  ld [b_spriteY], a ; TODO: Probably not needed...
   ld a, [b_spriteY]
   ld [ary_SpriteOAM], a
   ld [ary_SpriteOAM + 4], a
+  ; Basic Horizontal Positioning.
   ld a, [f_worldX]
   ld b, a
   cp 80
@@ -856,7 +870,7 @@ UpdateSpritePosition:
 ; Calculates and handles screen scrolling based on the player's position in the
 ; game world.
 ; ------------------------------------------------------------------------------
-; TODO Handle vertical scrolling.
+; TODO This code is a mess and can be refactored significantly.
 ; ------------------------------------------------------------------------------
 ScrollScreen:
   ; Horizontal scrolling
@@ -864,15 +878,31 @@ ScrollScreen:
   ld b, 0
   ld a, [f_worldX]
   cp 80
-  jr c, .set_scroll
-.check_scrolling
+  jr c, .set_scroll_x
+.check_scrolling_x
   cp 176
-  jr nc, .max_scroll
+  jr nc, .max_scroll_x
   sub 80
   ld b, a
-  jr .set_scroll
-.max_scroll
+  jr .set_scroll_x
+.max_scroll_x
   ld b, 96
-.set_scroll
+.set_scroll_x
+  ld [hl], b
+  ; Vertical scrolling
+  ld hl, rSCY
+  ld b, 0
+  ld a, [f_worldY]
+  cp 80
+  jr c, .set_scroll_y
+.check_scrolling_y
+  cp 176
+  jr nc, .max_scroll_y
+  sub 80
+  ld b, a
+  jr .set_scroll_y
+.max_scroll_y
+  ld b, 96
+.set_scroll_y
   ld [hl], b
   ret
