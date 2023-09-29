@@ -49,7 +49,14 @@ DEF IDLE_STATE_BLINK2 EQU 3
 ; Variable memory locations.
 ; ------------------------------------------------------------------------------
 
-; The state of the player (idle, running, airborne, etc.)
+; The state of the player.
+;
+; * `STATE_IDLE` - State for when the player is not actively moving.
+; * `STATE_WALKING` - Motion state that denotes the player is walking.
+; * `STATE_RUNNING` - Motion state for when the player is running.
+; * `STATE_PIVOT` - Motion state used to indicate the player is pivoting while
+;   changing direction.
+; * `STATE_AIRBORNE` - Motion state to denote that the player is airborne.
 DEF b_motionState EQU $CC00
 
 ; The direction the player is facing.
@@ -319,13 +326,16 @@ BoundPositionY:
 ; Sets the horizontal target velocity for the player based on controller input.
 ; ------------------------------------------------------------------------------
 SetTargetVelocityX:
+  DEF WALK_SPEED EQU $18
+  DEF RUN_SPEED EQU $28
+
   ; Set default run or walk speed based on if the B button is down
-  ld b, $18
+  ld b, WALK_SPEED
   ld a, [b_JoypadDown]
   ld d, a
   and a, BUTTON_B
   jr z, .check_right
-  ld b, $28
+  ld b, RUN_SPEED
 .check_right
   ld a, d
   and a, BUTTON_RIGHT
@@ -354,19 +364,44 @@ SetTargetVelocityX:
 ; match.
 ; ------------------------------------------------------------------------------
 AccelerateX:
+  ld a, [b_motionState]
+  cp STATE_AIRBORNE
+  jr nz, .accelerate
+.airborne
   ld a, [f_targetVelocityX]
-  ld hl, f_playerVelocityX
-  sbc a, [hl]
-  jr nz, .check_negative
+  or 0
+  jr nz, .check_directional_velocity
   ret
-.check_negative
+.check_directional_velocity
+  ld a, [f_targetVelocityX]
+  ld c, a
+  ld a, [f_playerVelocityX]
+  ld b, a
   and %1000_0000
-  jr z, .positive
-.negative
-  dec [hl]
+  ld a, b
+  jr nz, .handle_negative
+.handle_positive
+  cp c
+  jr nc, .accelerate
   ret
-.positive
+.handle_negative
+  cp c
+  jr c, .accelerate
+  ret
+.accelerate
+  ld a, [f_playerVelocityX]
+  ld hl, f_targetVelocityX
+  sub a, [hl]
+  jr nz, .check_sign
+  ret
+.check_sign
+  ld hl, f_playerVelocityX
+  and %1000_0000
+  jr z, .decrement
   inc [hl]
+  ret
+.decrement
+  dec [hl]
   ret
 
 ; ------------------------------------------------------------------------------
@@ -389,6 +424,10 @@ ApplyVelocityX:
 ; ------------------------------------------------------------------------------
 ApplyVelocity:
   ld b, a
+  cp a, 0
+  jr nz, .check_negative
+  ret
+.check_negative
   and %1000_0000
   jr nz, .negative
 .positive
