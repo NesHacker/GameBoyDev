@@ -19,13 +19,17 @@ Tileset:: INCBIN "tileset.gb"
 ; representing levels and use an encoding scheme (e.g. run-length encoding) to
 ; minimize ROM data usage.
 ; ------------------------------------------------------------------------------
-LevelTilemap:: INCBIN "level.tilemap"
+LevelTilemap:: INCBIN "level-collisiontest1.tilemap"
+
+; LevelTilemap:: INCBIN "level.tilemap"
 
 ; ------------------------------------------------------------------------------
 ; `binary data LevelData`
 ;
 ; This contains the data that detemines how each tile in the level acts in terms
-; of gameplay. For the demo there are eight types of tiles:
+; of gameplay.
+;
+; For the demo there are eight types of tiles:
 ;
 ; - `0`: open space
 ; - `1`: obstruction (ground, pips, unbreakable blocks, etc.)
@@ -36,4 +40,6 @@ LevelTilemap:: INCBIN "level.tilemap"
 ; - `6`: coins
 ; - `7`: switch blocks
 ; ------------------------------------------------------------------------------
-LevelData:: INCBIN "level-data.tilemap"
+LevelData:: INCBIN "level-collisiontest1-data.tilemap"
+
+; LevelData:: INCBIN "level-data.tilemap"
