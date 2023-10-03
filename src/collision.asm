@@ -2,22 +2,35 @@ INCLUDE "game.inc"
 INCLUDE "hardware.inc"
 INCLUDE "player.inc"
 
-DEF CollisionFound EQU $CBE0
+; TODO Unsure if we need this tbh...
+DEF CollisionDetected EQU $CBE0
 
-DEF Debug1 EQU $CBF0
-DEF Debug2 EQU $CBF2
+; Temporarily holds background tile column for that contains the player's
+; position (the point at the top left of the player sprite).
+DEF TileColumn EQU $CBF0
 
-; ld a, l
-; ld [Debug1], a
-; ld a, h
-; ld [Debug1+1], a
+; Temporarily holds background tile column for that contains the player's
+; position (the point at the top left of the player sprite).
+DEF TileRow EQU $CBF1
 
-; ld a, LOW(LevelData)
-; ld [Debug2], a
-; ld a, HIGH(LevelData)
-; ld [Debug2+1], a
+; If the player is not colliding this frame this will be set to `0`. If they are
+; colliding then it will be set to the level data id for the tile with which
+; they are colliding.
+DEF CollisionType EQU $CBF2
 
+; If a collision requires resetting the player's position then this variable
+; will hold the new "corrected" x-position for the player.
+DEF UpdateX EQU $CBF3
 
+; If a collision requires resetting the player's position then this variable
+; will hold the new "corrected" x-position for the player.
+DEF UpdateY EQU $CBF4
+
+; Width and height of the player sprite in pixels (used for AABB collision).
+DEF PLAYER_WIDTH EQU 16
+
+; Width and height of a background tile in pixels (used for AABB collision).
+DEF TILE_WIDTH EQU 8
 
 SECTION "Collision", ROM0
 
@@ -27,16 +40,34 @@ SECTION "Collision", ROM0
 ; Checks level bounadries and performs collision detection.
 ; ------------------------------------------------------------------------------
 CheckCollision::
-  ; Calculate the starting address for the nine tiles to check for collision.sss
+  ; We can find the "tile position" for the character by dividing the x and y
+  ; positions by eight and then rounding down, which can be done by bit shifting
+  ; both values 3 positions to the right:
+  ;
+  ; - TileColumn   = WorldX / 8 = WorldX >> 3
+  ; - TileRow      = WorldY / 8 = WorldY >> 3
+  ld a, [b_worldX]
+  and %1111_1000
+  rrca
+  rrca
+  rrca
+  ld [TileColumn], a
 
-  ; TileColumn   = WorldX / 8 = WorldX >> 3
-  ; TileRow      = WorldY / 8 = WorldY >> 3
+  ld a, [b_worldY]
+  and %1111_1000
+  rrca
+  rrca
+  rrca
+  ld [TileRow], a
+
+  ; Then we calclate the starting address for that particular tile in the level
+  ; data using some basic math that's been converted to use bitwise operations
+  ; (this makes it easier to do in assembly):
   ;
   ; DataAddress  = LevelData + 32 * TileRow + TileColumn
   ;              = LevelData + (TileRow << 5) + TileColumn
   ;              = LevelData + ((WorldY >> 3) << 5) + (WorldX >> 3)
   ;              = LevelData + ((WorldY & %1111_1000) << 2) + (WorldX >> 3)
-
   ld a, [b_worldY]    ; de <- 32 * TileRow = WorldY << 2
   and a, %1111_1000
   ld e, a
@@ -45,101 +76,158 @@ CheckCollision::
   rl d
   sla e
   rl d
-
-  ld a, [b_worldX]    ; a <- TileColumn = WorldX / 8 = WorldX >> 3
-  and %1111_1000
-  rrca
-  rrca
-  rrca
-
-  add a, e            ; de <- de + TileColumn = 32 * TileRow + TileColumn
+  ld a, [TileColumn]  ; de <- de + TileColumn = 32 * TileRow + TileColumn
+  add a, e
   ld e, a
   ld a, 0
   adc d
   ld d, a
-
   ld hl, LevelData    ; hl <- LevelData + 32 * TileRow + TileColumn
   add hl, de
 
-  ; Repurpose d and e to store the column and row numbers for the tile being
-  ; currently checked for collions
-  ld a, [b_worldX]    ; d <- TileColumn = WorldX / 8 = WorldX >> 3
-  and %1111_1000
-  rrca
-  rrca
-  rrca
+  ; Set d and e to the tile column and row respectively
+  ld a, [TileColumn]
   ld d, a
-
-  ld a, [b_worldY]    ; e <- TileRow = WorldY / 8 = WorldY >> 3
-  and %1111_1000
-  rrca
-  rrca
-  rrca
+  ld a, [TileRow]
   ld e, a
 
-  ; TODO Temporary checking code (can remove later if not useful)
+  ; Reset the `CollisionType` (basically, assume we aren't colliding...)
   ld a, 0
-  ld [CollisionFound], a
+  ld [CollisionType], a
 
-  ; Check the nine potentially overlapping tiles in the level data to see if a
-  ; has occurred.
-  ;
-  ; Note: if a collision occurs then the `CheckTileCollision` function will jump
-  ; directly into `ResolveCollision`, which will handle the paticular type of
-  ; collision and finally return back to the original caller of `CheckCollision`
-  ; (thus ending the execution of this routine).
+  ; Test collision based on the current motion state for the player
+  ld a, [b_motionState]
+  cp STATE_IDLE
+  jr nz, :+
+  ret
+: cp STATE_WALKING
+  jr nz, :+
+  ld a, [b_playerHeading]
+  jr .test_walk_collision
+: cp STATE_PIVOT
+  jr nz, :+
+  ld a, [b_playerHeading]
+  xor 1
+  jr .test_walk_collision
+: cp STATE_AIRBORNE
+  jr nz, .unknown_state
+  jr .test_airborne_collision
 
-  call CheckTileCollision   ; Tile 1 - (row, col)
+.unknown_state
+  ; This shouldn't be able to happen, but might if there is a bug in any of the
+  ; code that sets the player's motion state.
+  ret
 
+.test_walk_collision
+  call TestHorizontalCollision
+  ld a, [CollisionType]
+  jr nz, .handle_walk_collision
+  ret
+.handle_walk_collision
+  call UpdatePosition
+  ld a, STATE_IDLE
+  ld [b_motionState], a
+  ld a, 0
+  ld [f_targetVelocityX], a
+  ld [f_playerVelocityX], a
+  call ResetAnimationTimers
+  ret
+
+.test_airborne_collision
+  ; TODO Implement airborne collision detection...
+  ret
+
+; ------------------------------------------------------------------------------
+; `func TestHorizontalCollision(a)`
+;
+; Performs walking and running collision detection.
+;
+; * `a` - The heading direction to check for the collision test.
+; ------------------------------------------------------------------------------
+TestHorizontalCollision:
+  cp HEADING_LEFT
+  jr z, .moving_left
+.moving_right
+  ; If we are grounded and moving to the right we only need to check the two
+  ; tiles to the right of the player for collision (we move a maximum of 2.5
+  ; pixels each frame so it is impossible for the player to move past a block
+  ; in a single frame).
+  inc d                     ; Check collision with (tx + 2, ty)
+  inc hl
   inc d
   inc hl
-  call CheckTileCollision   ; Tile 2 - (row, col + 1)
-
-  inc d
-  inc hl
-  call CheckTileCollision   ; Tile 3 - (row, col + 2)
-
-  ; For the 4th tile we need to move down one row and back to the original
-  ; column. This is the same as adding 32 and subtracting 2 from the DataAddress
-  ; which when combined gives us: +32 - 2 = +30
-
-  dec d
-  dec d
-  inc e
-  ld bc, 30
+  call CheckTileCollision
+  cp 0
+  jr nz, .collision_right
+  inc e                     ; Check collision with (tx + 2, ty + 1)
+  ld bc, 32
   add hl, bc
-  call CheckTileCollision   ; Tile 4 - (row + 1, col)
-
-  inc d
-  inc hl
-  call CheckTileCollision   ; Tile 5 - (row + 1, col + 1)
-
-  inc d
-  inc hl
-  call CheckTileCollision   ; Tile 6 - (row + 1, col + 2)
-
-  dec d
-  dec d
+  call CheckTileCollision
+  cp 0
+  jr nz, .collision_right
+  ret
+.collision_right
+  ld [CollisionType], a
+  ld a, [TileColumn]
+  sla a
+  sla a
+  sla a
+  ld [UpdateX], a
+  ret
+.moving_left
+  ; When moving left we need only check the two left tiles of the character's
+  ; sprite for collision...
+  call CheckTileCollision
+  cp 0
+  jr nz, .collision_left
   inc e
-  ld bc, 30
+  ld bc, 32
   add hl, bc
-  call CheckTileCollision   ; Tile 7 - (row + 2, col)
+  call CheckTileCollision
+  cp 0
+  jr nz, .collision_left
+  ret
+.collision_left
+  ld [CollisionType], a
+  ld a, [TileColumn]
+  inc a
+  sla a
+  sla a
+  sla a
+  ld [UpdateX], a
+  ret
 
-  inc d
-  inc hl
-  call CheckTileCollision   ; Tile 8 - (row + 2, col + 1)
-
-  inc d
-  inc hl
-  call CheckTileCollision   ; Tile 9 - (row + 2, col + 2)
-
+; ------------------------------------------------------------------------------
+; `func UpdatePosition()`
+;
+; Updates the player's position after a collision based on the `UpdateX` and
+; `UpdateY` variables.
+; ------------------------------------------------------------------------------
+UpdatePosition:
+  ; Store the value in the world coordinates
+  ld a, [UpdateX]
+  ld [b_worldX], a
+  ; Convert the x-position to 12.4 fixed point and store the value
+  ld b, 0
+  sla a
+  rl b
+  sla a
+  rl b
+  sla a
+  rl b
+  sla a
+  rl b
+  ld [f_playerX], a
+  ld a, b
+  ld [f_playerX + 1], a
   ret
 
 ; ------------------------------------------------------------------------------
 ; `func CheckTileCollision(hl, d, e)`
 ;
 ; Axis-Aligned Boundry Box (AABB) collision detection for a tile and the player
-; sprite.
+; sprite. Sets `a` to zero if there is no collision, sets it to the value of the
+; tile in level data if there is.
 ;
 ; * `hl` - The address to the level data for the tile to check.
 ; * `d` - The column in the background for the tile.
@@ -150,17 +238,6 @@ CheckTileCollision:
   cp 0
   jr nz, .check_x_axis
   ret
-
-  ; TODO: Need to differentiate between each of the collision types, for now
-  ;       just assume that a non-zero value means "obstruction".
-
-  ; For this I use a simple AABB (Axis-Aligned Bounding Box) collision test
-  ; against the 16x16 box surrounding the player sprite and the 8x8 tile we are
-  ; currently testing.
-
-  DEF PLAYER_WIDTH EQU 16
-  DEF TILE_WIDTH EQU 8
-
 .check_x_axis
   ; b <- tileX = tileCol * 8 = tileCol << 3 = d << 3
   ld a, d
@@ -168,7 +245,6 @@ CheckTileCollision:
   sla a
   sla a
   ld b, a
-
 .check_too_far_left
   ; if (worldX + 16 < tileX)  -> No Collision
   ld a, [b_worldX]
@@ -176,16 +252,16 @@ CheckTileCollision:
   add a, PLAYER_WIDTH
   cp a, b
   jr nc, .check_too_far_right
+  ld a, 0
   ret
-
-  ; if (tileX + 8 < worldX)   -> No Collision
 .check_too_far_right
+  ; if (tileX + 8 < worldX)   -> No Collision
   ld a, b
   add a, TILE_WIDTH
   cp a, c
   jr nc, .check_y_axis
+  ld a, 0
   ret
-
 .check_y_axis
   ; b <- tileY = tileRow * 8 = tileRow << 3 = e << 3
   ld a, e
@@ -193,7 +269,6 @@ CheckTileCollision:
   sla a
   sla a
   ld b, a
-
 .check_too_far_above
   ; if (worldY + 16 < tileY)  -> No Collision
   ld a, [b_worldY]
@@ -201,20 +276,17 @@ CheckTileCollision:
   add a, PLAYER_WIDTH
   cp a, b
   jr nc, .check_too_far_below
+  ld a, 0
   ret
-
 .check_too_far_below
   ; if (tileY + 8 < worldY): -> No Collision
   ld a, b
   add a, TILE_WIDTH
   cp a, c
   jr nc, .collision_detected
+  ld a, 0
   ret
-
 .collision_detected
   ; If the above tests failed then we have a collision!
-  ld a, 1
-  ld [CollisionFound], a
-  ; Return two levels up the stack
-  pop af
+  ld a, [hl]
   ret

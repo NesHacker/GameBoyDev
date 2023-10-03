@@ -45,6 +45,8 @@ DEF SLOW_FALL_FRAMES EQU 24
 ; Variable memory locations.
 ; ------------------------------------------------------------------------------
 
+; TODO Remove the `STATE_RUNNING` state below (it's unused)...
+
 ; The state of the player.
 ;
 ; * `STATE_IDLE` - State for when the player is not actively moving.
@@ -99,3 +101,6 @@ DEF b_idleTimer EQU $CC10
 
 ; Timer used for transitioning from "slow" to "fast" falling.
 DEF b_slowFallTimer EQU $CC11
+
+; Initial delay between frames of the walking animation.
+DEF INITIAL_WALK_ANIMATION_DELAY EQU 12

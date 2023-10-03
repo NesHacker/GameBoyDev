@@ -109,18 +109,27 @@ InitializePlayer::
   ld a, 0
   ld [hli], a
 
-  ; TODO Clean me up
-  ld a, 12
-  ld [b_animationTimer], a
+  call ResetAnimationTimers
 
-  ; Initialize the idle timer and state
+  ld a, 0
+  ld [b_slowFallTimer], a
+
+  ret
+
+; ------------------------------------------------------------------------------
+; `func ResetAnimationTimers()`
+;
+; Resets the timer and frames for all character animations (walking, idle, etc.)
+; ------------------------------------------------------------------------------
+ResetAnimationTimers::
+  ld a, INITIAL_WALK_ANIMATION_DELAY
+  ld [b_animationTimer], a
+  ld a, 0
+  ld [b_animationFrame], a
   ld a, [idle_timer_durations]
   ld [b_idleTimer], a
   ld a, IDLE_STATE_STILL
   ld [b_idleState], a
-  ld a, 0
-  ld [b_slowFallTimer], a
-
   ret
 
 ; ------------------------------------------------------------------------------
@@ -423,7 +432,7 @@ ApplyVelocity:
 ; Converts 12.4 fixed point player coordinates into integer world coordinates
 ; for use when rendering the game's graphics.
 ; ------------------------------------------------------------------------------
-ConvertWorldCoordinates:
+ConvertWorldCoordinates::
   ld hl, f_playerX
   call FixedPointToInt
   ld [b_worldX], a
