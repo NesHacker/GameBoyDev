@@ -52,7 +52,6 @@ CheckCollision::
   rrca
   rrca
   ld [TileColumn], a
-
   ld a, [b_worldY]
   and %1111_1000
   rrca
@@ -91,10 +90,6 @@ CheckCollision::
   ld a, [TileRow]
   ld e, a
 
-  ; Reset the `CollisionType` (basically, assume we aren't colliding...)
-  ld a, 0
-  ld [CollisionType], a
-
   ; Test collision based on the current motion state for the player
   ld a, [b_motionState]
   cp STATE_IDLE
@@ -103,11 +98,13 @@ CheckCollision::
 : cp STATE_WALKING
   jr nz, :+
   ld a, [b_playerHeading]
+  ld b, a
   jr .test_walk_collision
 : cp STATE_PIVOT
   jr nz, :+
   ld a, [b_playerHeading]
   xor 1
+  ld b, a
   jr .test_walk_collision
 : cp STATE_AIRBORNE
   jr nz, .unknown_state
@@ -119,22 +116,55 @@ CheckCollision::
   ret
 
 .test_walk_collision
+  ; push hl
+  ; push de
+  ld a, 0
+  ld [CollisionType], a
+  ld a, b
   call TestHorizontalCollision
   ld a, [CollisionType]
-  jr nz, .handle_walk_collision
-  ret
+  cp 0
+  jr z, .test_fall_off
 .handle_walk_collision
-  call UpdatePosition
+  call UpdateHorizontalPosition
   ld a, STATE_IDLE
   ld [b_motionState], a
   ld a, 0
   ld [f_targetVelocityX], a
   ld [f_playerVelocityX], a
   call ResetAnimationTimers
+.test_fall_off
+  ; pop de
+  ; pop hl
+  ; TODO Implement me
+  ; ld a, 0
+  ; ld [CollisionType], a
+  ; call TestFallCollision
+  ; ld a, [CollisionType]
+  ; jr z, .handle_walk_collision
   ret
 
 .test_airborne_collision
-  ; TODO Implement airborne collision detection...
+  push hl
+  push de
+  ld a, 0
+  ld [CollisionType], a
+  call TestHorizontalCollision
+  ld a, [CollisionType]
+  cp 0
+  jr z, .test_vertical
+  call UpdateHorizontalPosition
+.test_vertical
+  pop de
+  pop hl
+  ld a, 0
+  ld [CollisionType], a
+  call TestVerticalCollision
+  ld a, [CollisionType]
+  cp 0
+  jr z, .done
+  call UpdateVerticalPosition
+.done
   ret
 
 ; ------------------------------------------------------------------------------
@@ -198,12 +228,11 @@ TestHorizontalCollision:
   ret
 
 ; ------------------------------------------------------------------------------
-; `func UpdatePosition()`
+; `func UpdateHorizontalPosition()`
 ;
-; Updates the player's position after a collision based on the `UpdateX` and
-; `UpdateY` variables.
+; Updates the player's horizontal position after a collision.
 ; ------------------------------------------------------------------------------
-UpdatePosition:
+UpdateHorizontalPosition:
   ; Store the value in the world coordinates
   ld a, [UpdateX]
   ld [b_worldX], a
@@ -220,6 +249,96 @@ UpdatePosition:
   ld [f_playerX], a
   ld a, b
   ld [f_playerX + 1], a
+  ret
+
+; ------------------------------------------------------------------------------
+; `func TestVerticalPosition(hl, d, e)`
+;
+; TODO Document me.
+; ------------------------------------------------------------------------------
+TestVerticalCollision:
+  ld a, [f_playerVelocityY]
+  and %1000_0000
+  jr nz, .moving_up
+.moving_down
+  ; Check (TileX, TileY + 2)
+  inc e
+  inc e
+  ld bc, 64
+  add hl, bc
+  call CheckTileCollision
+  cp 0
+  jr nz, .land
+  ; Check (TileX + 1, TileY + 2)
+  inc d
+  inc hl
+  call CheckTileCollision
+  cp 0
+  jr nz, .land
+  ret
+.land
+  ld [CollisionType], a
+  ld a, [TileRow]
+  sla a
+  sla a
+  sla a
+  ld [UpdateY], a
+  ; TODO Handle other collision types
+  ; (e.g. We shouldn't land when falling on a coin...)
+  ld a, STATE_IDLE
+  ld [b_motionState], a
+  ret
+.moving_up
+  ; Check (TileX, TileY)
+  call CheckTileCollision
+  cp 0
+  jr nz, .headbutt
+  ; Check (TileX + 1, TileY)
+  inc d
+  inc hl
+  call CheckTileCollision
+  cp 0
+  jr nz, .headbutt
+  ret
+.headbutt
+  ; TODO Handle other collision types
+  ; (e.g. We shouldn't stop jumping if we hit an onigiri...)
+  ld [CollisionType], a
+  ld a, [TileRow]
+  inc a
+  sla a
+  sla a
+  sla a
+  ld [UpdateY], a
+
+
+  ld a, 0
+  ld [f_playerVelocityY], a
+
+  ret
+
+; ------------------------------------------------------------------------------
+; `func UpdateVerticalPosition()`
+;
+; Updates the player's vertical position after a collision.
+; ------------------------------------------------------------------------------
+UpdateVerticalPosition:
+  ; Store the value in the world coordinates
+  ld a, [UpdateY]
+  ld [b_worldY], a
+  ; Convert the x-position to 12.4 fixed point and store the value
+  ld b, 0
+  sla a
+  rl b
+  sla a
+  rl b
+  sla a
+  rl b
+  sla a
+  rl b
+  ld [f_playerY], a
+  ld a, b
+  ld [f_playerY + 1], a
   ret
 
 ; ------------------------------------------------------------------------------

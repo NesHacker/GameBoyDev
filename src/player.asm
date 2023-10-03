@@ -25,9 +25,9 @@ DEF INITIAL_X EQU 64
 DEF INITIAL_X_HI EQU $04
 DEF INITIAL_X_LO EQU $00
 
-DEF INITIAL_Y EQU 210
+DEF INITIAL_Y EQU 208
 DEF INITIAL_Y_HI EQU $0D
-DEF INITIAL_Y_LO EQU $60
+DEF INITIAL_Y_LO EQU $00
 
 DEF INITIAL_SCREEN_X EQU 0
 DEF INITIAL_SCREEN_Y EQU 112
@@ -180,7 +180,6 @@ UpdateVerticalMotion:
 .airborne
   call AccelerateY
   call ApplyVelocityY
-  call BoundPositionY
   ret
 
 ; ------------------------------------------------------------------------------
@@ -230,35 +229,6 @@ ApplyVelocityY:
   ld a, [f_playerVelocityY]
   ld hl, f_playerY
   jp ApplyVelocity
-
-; ------------------------------------------------------------------------------
-; Bounds the player's vertical position.
-; ------------------------------------------------------------------------------
-; TODO This will need to be completely overhauled when we add hit detection.
-; ------------------------------------------------------------------------------
-BoundPositionY:
-  ld hl, f_playerY + 1
-  ld a, [hld]
-  cp a, INITIAL_Y_HI
-  jr z, .check_low_byte
-  jr nc, .land
-  ret
-.check_low_byte
-  ld a, [hl]
-  cp a, INITIAL_Y_LO
-  jr z, .land
-  jr nc, .land
-  ret
-.land
-  ld a, INITIAL_Y_LO
-  ld [hli], a
-  ld a, INITIAL_Y_HI
-  ld [hl], a
-  ld a, INITIAL_SPRITE_Y
-  ld [b_spriteY], a
-  ld a, STATE_IDLE
-  ld [b_motionState], a
-  ret
 
 ; ------------------------------------------------------------------------------
 ; `func SetTargetVelocityX()`
@@ -727,20 +697,21 @@ UpdateSpritePosition:
   ; Basic Vertical Positioning.
   ld a, [b_worldY]
   ld b, a
-  cp 80
+  cp 72 ; TODO Define constant
   jr c, .set_y
 .check_scrolling_y
-  cp 176
+  cp 184
   jr nc, .max_scroll_y
-  ld a, 80
+  ld a, 72 ; TODO Define constant
   jr .set_y
 .max_scroll_y
   ld a, b
-  sub a, 96 ; TODO: Make a MAX_SCROLL_Y const and use it here...
+  sub a, 112 ; TODO: Make a MAX_SCROLL_Y const and use it here...
 .set_y
-  ld b, 10  ; This adds a +10 dot offset to account for sprites rendering.
+  ; Add a +16 dot offset due to how sprites are rendered
+  ld b, $10
   add a, b
-  ld [b_spriteY], a ; TODO: Probably not needed...
+  ld [b_spriteY], a
   ld a, [b_spriteY]
   ld [ary_SpriteOAM], a
   ld [ary_SpriteOAM + 4], a
@@ -750,9 +721,9 @@ UpdateSpritePosition:
   cp 80
   jr c, .set_x
 .check_scrolling
-  cp 176
+  cp 176 ; TODO Define constant
   jr nc, .max_scroll
-  ld a, 80
+  ld a, 80 ; TODO Define constant
   jr .set_x
 .max_scroll
   ld a, b
@@ -779,32 +750,32 @@ ScrollScreen:
   ld hl, rSCX
   ld b, 0
   ld a, [b_worldX]
-  cp 80
+  cp 80                 ; TODO Define constant
   jr c, .set_scroll_x
 .check_scrolling_x
-  cp 176
+  cp 176                ; TODO Define constant
   jr nc, .max_scroll_x
-  sub 80
+  sub 80                ; TODO Define constant
   ld b, a
   jr .set_scroll_x
 .max_scroll_x
-  ld b, 96
+  ld b, 96              ; TODO Define constant
 .set_scroll_x
   ld [hl], b
   ; Vertical scrolling
   ld hl, rSCY
   ld b, 0
   ld a, [b_worldY]
-  cp 80
+  cp 72                 ; TODO Define constant
   jr c, .set_scroll_y
 .check_scrolling_y
-  cp 176
+  cp 184                ; TODO Define constant
   jr nc, .max_scroll_y
-  sub 80
+  sub 72                ; TODO Define constant
   ld b, a
   jr .set_scroll_y
 .max_scroll_y
-  ld b, 96
+  ld b, 112             ; TODO Define constant
 .set_scroll_y
   ld [hl], b
   ret
