@@ -228,7 +228,59 @@ AccelerateY:
 ApplyVelocityY:
   ld a, [f_playerVelocityY]
   ld hl, f_playerY
-  jp ApplyVelocity
+  ld b, a
+  cp a, 0
+  jr nz, .check_negative
+  ret
+.check_negative
+  and %1000_0000
+  jr nz, .negative
+.positive
+  xor a   ; Fast way to clear the carry flag (vs. scf + ccf)
+  ld a, b
+  add [hl]
+  ld [hli], a
+  ld c, a
+  ld a, 0
+  adc [hl]
+  ld [hl], a
+  ; Check to see if the value exceeds dot 240 and bound accordingly...
+  cp a, $0F
+  jr z, .check_lo_byte
+  jr nc, .bound_above
+  ret
+.check_lo_byte
+  ld a, c
+  cp $00
+  jr nz, .bound_above
+  ret
+.bound_above
+  ld a, $0F
+  ld [hld], a
+  ld a, $00
+  ld [hl], a
+  ret
+.negative
+  ld a, b
+  cpl
+  inc a
+  ld b, a
+  ld a, [hl]
+  sbc b
+  ld [hli], a
+  ld a, [hl]
+  sbc 0
+  ld [hl], a
+  ; For left and top bounding, just check if the result is negative and set the
+  ; value to 0 if that is the case.
+  and a, %1000_0000
+  jr nz, .bound_below
+  ret
+.bound_below
+  ld a, 0
+  ld [hld], a
+  ld [hl], a
+  ret
 
 ; ------------------------------------------------------------------------------
 ; `func SetTargetVelocityX()`
@@ -322,26 +374,6 @@ AccelerateX:
 ApplyVelocityX:
   ld a, [f_playerVelocityX]
   ld hl, f_playerX
-  jp ApplyVelocity
-
-; ------------------------------------------------------------------------------
-; `func ApplyVelocity(a, hl)`
-;
-; Applies the given velocity to the given position state variable.
-;
-; - Param `a` - The velocity to apply.
-; - Param `hl` - Address for the position variable to modify.
-; ------------------------------------------------------------------------------
-; TODO: The bounding code will probably need to be broken out into its own
-;       routine upon implementing hit detection.
-; ------------------------------------------------------------------------------
-ApplyVelocity:
-  ; Character cannot move beyond dot 240 otherwise their sprite would fall off
-  ; the screen (this the case for both axes). The decimal value of 240 is equal
-  ; to $F0 in hexadecimal, and in 12.4 fixed point this is shifted across two
-  ; bytes: $0F $00.
-  DEF MAX_VALUE_LO EQU $00
-  DEF MAX_VALUE_HI EQU $0F
   ld b, a
   cp a, 0
   jr nz, .check_negative
@@ -373,6 +405,7 @@ ApplyVelocity:
   ld [hld], a
   ld a, $00
   ld [hl], a
+  call StopHorizontal
   ret
 .negative
   ld a, b
@@ -394,6 +427,7 @@ ApplyVelocity:
   ld a, 0
   ld [hld], a
   ld [hl], a
+  call StopHorizontal
   ret
 
 ; ------------------------------------------------------------------------------

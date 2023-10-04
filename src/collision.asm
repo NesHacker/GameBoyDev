@@ -177,7 +177,7 @@ MoveHorizontal:
 ; ------------------------------------------------------------------------------
 ; TODO Document me
 ; ------------------------------------------------------------------------------
-StopHorizontal:
+StopHorizontal::
   ld a, 0
   ld [f_targetVelocityX], a
   ld [f_playerVelocityX], a
@@ -239,7 +239,7 @@ MoveVertical:
 ; ------------------------------------------------------------------------------
 ; TODO Document me
 ; ------------------------------------------------------------------------------
-StopVertical:
+StopVertical::
   ld a, [f_playerVelocityY]
   and %1000_0000
   jr nz, .rising
