@@ -18,13 +18,17 @@ DEF TileRow EQU $CBF1
 ; they are colliding.
 DEF CollisionType EQU $CBF2
 
-; If a collision requires resetting the player's position then this variable
-; will hold the new "corrected" x-position for the player.
-DEF UpdateX EQU $CBF3
+; X-coordinate of the player bounding box to use when testing collision.
+DEF CollisionX EQU $CBF3
 
-; If a collision requires resetting the player's position then this variable
-; will hold the new "corrected" x-position for the player.
-DEF UpdateY EQU $CBF4
+; Y-Coordinate of the player bounding box to use when testing collision.
+DEF CollisionY EQU $CBF4
+
+; Heading to check when testing collision.
+DEF CollisionHeading EQU $CBF5
+
+; Width to use when testing with the player sprite.
+Def PlayerWidth EQU $CBF6
 
 ; Width and height of the player sprite in pixels (used for AABB collision).
 DEF PLAYER_WIDTH EQU 16
@@ -47,6 +51,7 @@ CheckCollision::
   ; - TileColumn   = WorldX / 8 = WorldX >> 3
   ; - TileRow      = WorldY / 8 = WorldY >> 3
   ld a, [b_worldX]
+  ld [CollisionX], a
   and %1111_1000
   rrca
   rrca
@@ -68,6 +73,7 @@ CheckCollision::
   ;              = LevelData + ((WorldY >> 3) << 5) + (WorldX >> 3)
   ;              = LevelData + ((WorldY & %1111_1000) << 2) + (WorldX >> 3)
   ld a, [b_worldY]    ; de <- 32 * TileRow = WorldY << 2
+  ld [CollisionY], a
   and a, %1111_1000
   ld e, a
   ld d, 0
@@ -95,250 +101,257 @@ CheckCollision::
   cp STATE_IDLE
   jr nz, :+
   ret
-: cp STATE_WALKING
-  jr nz, :+
-  ld a, [b_playerHeading]
-  ld b, a
-  jr .test_walk_collision
 : cp STATE_PIVOT
   jr nz, :+
   ld a, [b_playerHeading]
   xor 1
-  ld b, a
-  jr .test_walk_collision
-: cp STATE_AIRBORNE
-  jr nz, .unknown_state
-  jr .test_airborne_collision
+  ld [CollisionHeading], a
+  jr .collision_test
+: ld a, [b_playerHeading]
+  ld [CollisionHeading], a
+.collision_test
 
-.unknown_state
-  ; This shouldn't be able to happen, but might if there is a bug in any of the
-  ; code that sets the player's motion state.
-  ret
+  ld a, [b_motionState]
+  cp STATE_AIRBORNE
+  jr z, .test_airborne
 
-.test_walk_collision
-  ; push hl
-  ; push de
-  ld a, 0
-  ld [CollisionType], a
-  ld a, b
-  call TestHorizontalCollision
-  ld a, [CollisionType]
-  cp 0
-  jr z, .test_fall_off
-.handle_walk_collision
+.grounded
+  call TestHorizontal
+  jr z, .check_fall
+  call MoveHorizontal
   call UpdateHorizontalPosition
+  call StopHorizontal
   ld a, STATE_IDLE
   ld [b_motionState], a
-  ld a, 0
-  ld [f_targetVelocityX], a
-  ld [f_playerVelocityX], a
-  call ResetAnimationTimers
-.test_fall_off
-  ; pop de
-  ; pop hl
-  ; TODO Implement me
-  ; ld a, 0
-  ; ld [CollisionType], a
-  ; call TestFallCollision
-  ; ld a, [CollisionType]
-  ; jr z, .handle_walk_collision
+.check_fall
+  call CheckFall
   ret
 
-.test_airborne_collision
-  push hl
-  push de
-  ld a, 0
-  ld [CollisionType], a
-  call TestHorizontalCollision
-  ld a, [CollisionType]
-  cp 0
+  ; TODO Fix bug that causes the player to jerk left and right when hitting
+  ; blocks from below (you kinda have to be dead center between blocks for it
+  ; to happen)
+.test_airborne:
+  call TestHorizontal
   jr z, .test_vertical
+  call MoveHorizontal
+  call TestHorizontal
+  jr nz, .move_vertical
   call UpdateHorizontalPosition
+  call StopHorizontal
+  ret
 .test_vertical
-  pop de
-  pop hl
-  ld a, 0
-  ld [CollisionType], a
-  call TestVerticalCollision
-  ld a, [CollisionType]
-  cp 0
+  call TestVertical
   jr z, .done
+.move_vertical
+  call MoveVertical
+  call StopVertical
   call UpdateVerticalPosition
 .done
   ret
 
 ; ------------------------------------------------------------------------------
-; `func TestHorizontalCollision(a)`
-;
-; Performs walking and running collision detection.
-;
-; * `a` - The heading direction to check for the collision test.
+; TODO Document me
 ; ------------------------------------------------------------------------------
-TestHorizontalCollision:
-  cp HEADING_LEFT
-  jr z, .moving_left
+MoveHorizontal:
+  ld a, [CollisionHeading]
+  cp 0
+  jr nz, .moving_left
 .moving_right
-  ; If we are grounded and moving to the right we only need to check the two
-  ; tiles to the right of the player for collision (we move a maximum of 2.5
-  ; pixels each frame so it is impossible for the player to move past a block
-  ; in a single frame).
-  inc d                     ; Check collision with (tx + 2, ty)
-  inc hl
-  inc d
-  inc hl
-  call CheckTileCollision
-  cp 0
-  jr nz, .collision_right
-  inc e                     ; Check collision with (tx + 2, ty + 1)
-  ld bc, 32
-  add hl, bc
-  call CheckTileCollision
-  cp 0
-  jr nz, .collision_right
-  ret
-.collision_right
-  ld [CollisionType], a
   ld a, [TileColumn]
   sla a
   sla a
   sla a
-  ld [UpdateX], a
+  ld [CollisionX], a
   ret
 .moving_left
-  ; When moving left we need only check the two left tiles of the character's
-  ; sprite for collision...
-  call CheckTileCollision
-  cp 0
-  jr nz, .collision_left
-  inc e
-  ld bc, 32
-  add hl, bc
-  call CheckTileCollision
-  cp 0
-  jr nz, .collision_left
-  ret
-.collision_left
-  ld [CollisionType], a
   ld a, [TileColumn]
   inc a
   sla a
   sla a
   sla a
-  ld [UpdateX], a
+  inc d
+  inc hl
+  ld [CollisionX], a
   ret
 
 ; ------------------------------------------------------------------------------
-; `func UpdateHorizontalPosition()`
-;
-; Updates the player's horizontal position after a collision.
+; TODO Document me
 ; ------------------------------------------------------------------------------
-UpdateHorizontalPosition:
-  ; Store the value in the world coordinates
-  ld a, [UpdateX]
-  ld [b_worldX], a
-  ; Convert the x-position to 12.4 fixed point and store the value
-  ld b, 0
-  sla a
-  rl b
-  sla a
-  rl b
-  sla a
-  rl b
-  sla a
-  rl b
-  ld [f_playerX], a
-  ld a, b
-  ld [f_playerX + 1], a
+StopHorizontal:
+  ld a, 0
+  ld [f_targetVelocityX], a
+  ld [f_playerVelocityX], a
+  call ResetAnimationTimers
   ret
 
 ; ------------------------------------------------------------------------------
-; `func TestVerticalPosition(hl, d, e)`
-;
-; TODO Document me.
+; TODO Document Me
+; TODO Fix falling at right edge bug...
 ; ------------------------------------------------------------------------------
-TestVerticalCollision:
-  ld a, [f_playerVelocityY]
-  and %1000_0000
-  jr nz, .moving_up
-.moving_down
-  ; Check (TileX, TileY + 2)
+CheckFall:
   inc e
   inc e
   ld bc, 64
   add hl, bc
   call CheckTileCollision
-  cp 0
-  jr nz, .land
-  ; Check (TileX + 1, TileY + 2)
+  jr z, .check_tile_2
+  ret
+.check_tile_2
   inc d
   inc hl
   call CheckTileCollision
-  cp 0
-  jr nz, .land
+  jr z, .check_tile_3
   ret
+.check_tile_3
+  inc d
+  inc hl
+  call CheckTileCollision
+  jr z, .set_falling
+  ret
+.set_falling
+  ld a, STATE_AIRBORNE
+  ld [b_motionState], a
+  ret
+
+; ------------------------------------------------------------------------------
+; TODO Document me
+; ------------------------------------------------------------------------------
+MoveVertical:
+  ld a, [f_playerVelocityY]
+  and %1000_000
+  jr nz, .rising
+.falling
+  ld a, [TileRow]
+  sla a
+  sla a
+  sla a
+  ld [CollisionY], a
+  ret
+.rising
+  ld a, [TileRow]
+  inc a
+  sla a
+  sla a
+  sla a
+  ld [CollisionY], a
+  ret
+
+; ------------------------------------------------------------------------------
+; TODO Document me
+; ------------------------------------------------------------------------------
+StopVertical:
+  ld a, [f_playerVelocityY]
+  and %1000_0000
+  jr nz, .rising
 .land
   ld [CollisionType], a
   ld a, [TileRow]
   sla a
   sla a
   sla a
-  ld [UpdateY], a
+  ld [CollisionY], a
+  call TestVertical
+  jr z, .done
+  ld a, [TileRow]
+  dec a
+  sla a
+  sla a
+  sla a
+  ld [CollisionY], a
+.done
   ; TODO Handle other collision types
   ; (e.g. We shouldn't land when falling on a coin...)
   ld a, STATE_IDLE
   ld [b_motionState], a
   ret
-.moving_up
-  ; Check (TileX, TileY)
+.rising
+  ld a, 0
+  ld [f_playerVelocityY], a
+  ret
+
+; ------------------------------------------------------------------------------
+; `func TestHorizontal(hl, de)`
+;
+; Tests collision for the player horizontally.
+;
+; - `hl` - Address of the of background tile for the player's top-left position.
+; - `de` - The column and row for the tile in the background.
+; ------------------------------------------------------------------------------
+TestHorizontal:
+  push hl
+  push de
+  ld a, 0
+  ld [CollisionType], a
+  ld a, [CollisionHeading]
+  cp HEADING_LEFT
+  jr z, .check_tiles
+  inc d
+  inc hl
+  inc d
+  inc hl
+.check_tiles
   call CheckTileCollision
-  cp 0
-  jr nz, .headbutt
-  ; Check (TileX + 1, TileY)
+  jr nz, .collision
+  inc e
+  ld bc, 32
+  add hl, bc
+  call CheckTileCollision
+  jr nz, .collision
+  jr .return
+  ld a, [b_motionState]
+  cp STATE_AIRBORNE
+  jr nz, .return
+  inc e
+  ld bc, 32
+  add hl, bc
+  call CheckTileCollision
+  jr nz, .collision
+  ld a, [b_motionState]
+  cp STATE_AIRBORNE
+  jr nz, .return
+  inc e
+  ld bc, 32
+  add hl, bc
+  call CheckTileCollision
+  jr z, .return
+.collision
+  ld [CollisionType], a
+.return
+  pop de
+  pop hl
+  ret
+
+; ------------------------------------------------------------------------------
+; `func TestVertical(hl, de)`
+;
+; Tests collision for the player vertically.
+;
+; - `hl` - Address of the of background tile for the player's top-left position.
+; - `de` - The column and row for the tile in the background.
+; ------------------------------------------------------------------------------
+TestVertical:
+  ld a, [f_playerVelocityY]
+  and %1000_0000
+  jr nz, .check_tiles
+.moving_down
+  inc e
+  inc e
+  ld bc, 64
+  add hl, bc
+.check_tiles
+  call CheckTileCollision
+  jr nz, .collision
   inc d
   inc hl
   call CheckTileCollision
-  cp 0
-  jr nz, .headbutt
+  jr nz, .collision
+  inc d
+  inc hl
+  call CheckTileCollision
+  jr nz, .collision
   ret
-.headbutt
-  ; TODO Handle other collision types
-  ; (e.g. We shouldn't stop jumping if we hit an onigiri...)
+.collision
   ld [CollisionType], a
-  ld a, [TileRow]
-  inc a
-  sla a
-  sla a
-  sla a
-  ld [UpdateY], a
-
-
-  ld a, 0
-  ld [f_playerVelocityY], a
-
-  ret
-
-; ------------------------------------------------------------------------------
-; `func UpdateVerticalPosition()`
-;
-; Updates the player's vertical position after a collision.
-; ------------------------------------------------------------------------------
-UpdateVerticalPosition:
-  ; Store the value in the world coordinates
-  ld a, [UpdateY]
-  ld [b_worldY], a
-  ; Convert the x-position to 12.4 fixed point and store the value
-  ld b, 0
-  sla a
-  rl b
-  sla a
-  rl b
-  sla a
-  rl b
-  sla a
-  rl b
-  ld [f_playerY], a
-  ld a, b
-  ld [f_playerY + 1], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -365,22 +378,19 @@ CheckTileCollision:
   sla a
   ld b, a
 .check_too_far_left
-  ; if (worldX + 16 < tileX)  -> No Collision
-  ld a, [b_worldX]
+  ; if (X + 16 < tileX)  -> No Collision
+  ld a, [CollisionX]
   ld c, a
   add a, PLAYER_WIDTH
   cp a, b
-  jr nc, .check_too_far_right
-  ld a, 0
-  ret
+  jr c, .no_hit
+  jr z, .no_hit
 .check_too_far_right
-  ; if (tileX + 8 < worldX)   -> No Collision
+  ; if (X + 8 < worldX)   -> No Collision
   ld a, b
   add a, TILE_WIDTH
   cp a, c
-  jr nc, .check_y_axis
-  ld a, 0
-  ret
+  jr c, .no_hit
 .check_y_axis
   ; b <- tileY = tileRow * 8 = tileRow << 3 = e << 3
   ld a, e
@@ -389,23 +399,78 @@ CheckTileCollision:
   sla a
   ld b, a
 .check_too_far_above
-  ; if (worldY + 16 < tileY)  -> No Collision
-  ld a, [b_worldY]
+  ; if (Y + 16 < tileY)  -> No Collision
+  ld a, [CollisionY]
   ld c, a
   add a, PLAYER_WIDTH
   cp a, b
   jr nc, .check_too_far_below
   ld a, 0
+  cp 0
   ret
+  ; jr c, .no_hit
+  ; jr z, .no_hit
 .check_too_far_below
-  ; if (tileY + 8 < worldY): -> No Collision
+  ; if (Y + 8 < worldY): -> No Collision
   ld a, b
   add a, TILE_WIDTH
   cp a, c
   jr nc, .collision_detected
+.no_hit
   ld a, 0
+  cp 0
   ret
 .collision_detected
   ; If the above tests failed then we have a collision!
   ld a, [hl]
+  cp 0
+  ret
+
+
+; ------------------------------------------------------------------------------
+; `func UpdateHorizontalPosition()`
+;
+; Updates the player's horizontal position after a collision.
+; ------------------------------------------------------------------------------
+UpdateHorizontalPosition:
+  ; Store the value in the world coordinates
+  ld a, [CollisionX]
+  ld [b_worldX], a
+  ; Convert the x-position to 12.4 fixed point and store the value
+  ld b, 0
+  sla a
+  rl b
+  sla a
+  rl b
+  sla a
+  rl b
+  sla a
+  rl b
+  ld [f_playerX], a
+  ld a, b
+  ld [f_playerX + 1], a
+  ret
+
+; ------------------------------------------------------------------------------
+; `func UpdateVerticalPosition()`
+;
+; Updates the player's vertical position after a collision.
+; ------------------------------------------------------------------------------
+UpdateVerticalPosition:
+  ; Store the value in the world coordinates
+  ld a, [CollisionY]
+  ld [b_worldY], a
+  ; Convert the x-position to 12.4 fixed point and store the value
+  ld b, 0
+  sla a
+  rl b
+  sla a
+  rl b
+  sla a
+  rl b
+  sla a
+  rl b
+  ld [f_playerY], a
+  ld a, b
+  ld [f_playerY + 1], a
   ret
