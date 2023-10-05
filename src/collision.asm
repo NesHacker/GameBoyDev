@@ -2,9 +2,6 @@ INCLUDE "game.inc"
 INCLUDE "hardware.inc"
 INCLUDE "player.inc"
 
-; TODO Unsure if we need this tbh...
-DEF CollisionDetected EQU $CBE0
-
 ; Temporarily holds background tile column for that contains the player's
 ; position (the point at the top left of the player sprite).
 DEF TileColumn EQU $CBF0
@@ -110,11 +107,9 @@ CheckCollision::
 : ld a, [b_playerHeading]
   ld [CollisionHeading], a
 .collision_test
-
   ld a, [b_motionState]
   cp STATE_AIRBORNE
   jr z, .test_airborne
-
 .grounded
   call TestHorizontal
   jr z, .check_fall
@@ -126,15 +121,11 @@ CheckCollision::
 .check_fall
   call CheckFall
   ret
-
-  ; TODO Fix bug that causes the player to jerk left and right when hitting
-  ; blocks from below (you kinda have to be dead center between blocks for it
-  ; to happen)
 .test_airborne:
   call TestHorizontal
   jr z, .test_vertical
   call MoveHorizontal
-  call TestHorizontal
+  call TestPlayerTopTiles
   jr nz, .move_vertical
   call UpdateHorizontalPosition
   call StopHorizontal
@@ -320,6 +311,37 @@ TestHorizontal:
   pop de
   pop hl
   ret
+
+; ------------------------------------------------------------------------------
+; `func TestPlayerTopTiles(hl, de)`
+;
+; Very similar to `TestVertical` but only tests the top two tiles for the
+; player for collision instead of the top three. This is used as a secondary
+; check when determining if the player is colliding to the left/right or to the
+; top/bottom when airborne.
+;
+; - `hl` - Address of the of background tile for the player's top-left position.
+; - `de` - The column and row for the tile in the background.
+; ------------------------------------------------------------------------------
+TestPlayerTopTiles:
+  ld a, [f_playerVelocityY]
+  and %1000_0000
+  jr nz, .check_tiles
+.moving_down
+  inc e
+  inc e
+  ld bc, 64
+  add hl, bc
+.check_tiles
+  call CheckTileCollision
+  jr nz, .collision
+  inc d
+  inc hl
+  call CheckTileCollision
+  jr nz, .collision
+  ret
+.collision
+  ld [CollisionType], a
 
 ; ------------------------------------------------------------------------------
 ; `func TestVertical(hl, de)`
