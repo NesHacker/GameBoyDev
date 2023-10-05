@@ -4,15 +4,12 @@ DEF STATE_IDLE EQU 0
 ; Player state when the chatacter is walking.
 DEF STATE_WALKING EQU 1
 
-; Player state when the character is running (similar to P-speed in SMB3)
-DEF STATE_RUNNING EQU 2
-
 ; Player state when the character is pivoting while changing directions on the
 ; ground.
-DEF STATE_PIVOT EQU 3
+DEF STATE_PIVOT EQU 2
 
 ; Player state when the character is jumping or falling.
-DEF STATE_AIRBORNE EQU 4
+DEF STATE_AIRBORNE EQU 3
 
 ; Represent the player facing right on the screen.
 DEF HEADING_RIGHT EQU 0
@@ -41,17 +38,62 @@ DEF IDLE_STATE_BLINK2 EQU 3
 ; Number of frames to allow "slow" falling while holding the A-button.
 DEF SLOW_FALL_FRAMES EQU 24
 
+; Initial state for the player.
+DEF INITIAL_STATE equ STATE_AIRBORNE
+
+; Initial heading for the player.
+DEF INITIAL_HEADING equ HEADING_RIGHT
+
+; Initial horizontal position for the player.
+DEF INITIAL_X EQU 64
+
+; High byte of the initial player x position in 12.4 fixed point.
+DEF INITIAL_X_HI EQU $04
+
+; Low byte of the initial player x position in 12.4 fixed point.
+DEF INITIAL_X_LO EQU $00
+
+; Initial vertical position for the player.
+DEF INITIAL_Y EQU 208
+
+; High byte of the initial player y position in 12.4 fixed point.
+DEF INITIAL_Y_HI EQU $0D
+
+; Low byte of the initial player y position in 12.4 fixed point.
+DEF INITIAL_Y_LO EQU $00
+
+; Initial horizontal scroll position for the screen.
+DEF INITIAL_SCREEN_X EQU 0
+
+; Initial vertical scroll position for the screen.
+DEF INITIAL_SCREEN_Y EQU 112
+
+; Initial vertical position for the sprite.
+DEF INITIAL_SPRITE_Y EQU INITIAL_Y - INITIAL_SCREEN_Y
+
+; Initial horizontal position for the sprite.
+DEF INITIAL_SPRITE_X EQU INITIAL_X - INITIAL_SCREEN_X
+
+; X-Position where screen scrolling begins.
+DEF SCROLL_START_X EQU 80
+
+; Y-Position where screen scrolling begins.
+DEF SCROLL_START_Y EQU 72
+
+; Maximum horizontal scroll for the screen.
+DEF MAX_SCROLL_X EQU 96
+
+; Maximum vertical scroll for the screen.
+DEF MAX_SCROLL_Y EQU 112
+
 ; ------------------------------------------------------------------------------
 ; Variable memory locations.
 ; ------------------------------------------------------------------------------
-
-; TODO Remove the `STATE_RUNNING` state below (it's unused)...
 
 ; The state of the player.
 ;
 ; * `STATE_IDLE` - State for when the player is not actively moving.
 ; * `STATE_WALKING` - Motion state that denotes the player is walking.
-; * `STATE_RUNNING` - Motion state for when the player is running.
 ; * `STATE_PIVOT` - Motion state used to indicate the player is pivoting while
 ;   changing direction.
 ; * `STATE_AIRBORNE` - Motion state to denote that the player is airborne.

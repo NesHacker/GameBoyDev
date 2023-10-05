@@ -2,38 +2,6 @@ INCLUDE "game.inc"
 INCLUDE "hardware.inc"
 INCLUDE "player.inc"
 
-/*
-TODO This module needs to be broken down into various sub-modules to handle
-     movement and positioning, hit detection and bound checking, sprite and
-     graphics.
-
-TODO Ideally the movement & bounds checking code would be executed immediately
-     after rendering has been completed during the VBLANK. This provides a lot
-     more time to perform calulation since they don't have to fit in the 1.09ms
-     VBLANK interval (the rest of the screen takes 15.66ms to render, so yeah
-     we can do a heck of a lot more in that time).
-*/
-
-; ------------------------------------------------------------------------------
-; TODO Document me!!!
-; ------------------------------------------------------------------------------
-
-DEF INITIAL_STATE equ STATE_IDLE
-DEF INITIAL_HEADING equ HEADING_RIGHT
-
-DEF INITIAL_X EQU 64
-DEF INITIAL_X_HI EQU $04
-DEF INITIAL_X_LO EQU $00
-
-DEF INITIAL_Y EQU 208
-DEF INITIAL_Y_HI EQU $0D
-DEF INITIAL_Y_LO EQU $00
-
-DEF INITIAL_SCREEN_X EQU 0
-DEF INITIAL_SCREEN_Y EQU 112
-DEF INITIAL_SPRITE_Y EQU INITIAL_Y - INITIAL_SCREEN_Y
-DEF INITIAL_SPRITE_X EQU INITIAL_X - INITIAL_SCREEN_X
-
 SECTION "Player", ROM0
 
 ; ------------------------------------------------------------------------------
@@ -77,10 +45,6 @@ InitializePlayer::
 
   ld a, INITIAL_SPRITE_Y
   ld [b_spriteY], a
-
-
-  ; TODO Init fixed point screen coordinates
-
 
   ; Initialize the screen position
   ld a, INITIAL_SCREEN_X
@@ -138,17 +102,13 @@ ResetAnimationTimers::
 ; Called every frame to update the player state (e.g. position, velcoity, etc.)
 ; based on button input and world state.
 ; ------------------------------------------------------------------------------
-; TODO Clean up the code here once the scrolling implementation is working.
-; ------------------------------------------------------------------------------
 UpdatePlayer::
   call UpdateVerticalMotion
   call SetTargetVelocityX
   call AccelerateX
   call ApplyVelocityX
   call ConvertWorldCoordinates
-
   call CheckCollision
-
   call UpdateSprite
   call ScrollScreen
   ret
@@ -725,22 +685,20 @@ idle_tiles:
 ;
 ; Updates the player sprite position on the screen.
 ; ------------------------------------------------------------------------------
-; TODO This code is a mess and can be refactored significantly.
-; ------------------------------------------------------------------------------
 UpdateSpritePosition:
   ; Basic Vertical Positioning.
   ld a, [b_worldY]
   ld b, a
-  cp 72 ; TODO Define constant
+  cp SCROLL_START_Y
   jr c, .set_y
 .check_scrolling_y
   cp 184
   jr nc, .max_scroll_y
-  ld a, 72 ; TODO Define constant
+  ld a, SCROLL_START_Y
   jr .set_y
 .max_scroll_y
   ld a, b
-  sub a, 112 ; TODO: Make a MAX_SCROLL_Y const and use it here...
+  sub a, MAX_SCROLL_Y
 .set_y
   ; Add a +16 dot offset due to how sprites are rendered
   ld b, $10
@@ -755,17 +713,17 @@ UpdateSpritePosition:
   cp 80
   jr c, .set_x
 .check_scrolling
-  cp 176 ; TODO Define constant
+  cp 256 - SCROLL_START_X
   jr nc, .max_scroll
-  ld a, 80 ; TODO Define constant
+  ld a, SCROLL_START_X
   jr .set_x
 .max_scroll
   ld a, b
-  sub a, 96 ; TODO: Make a MAX_SCROLL_X const and use it here...
+  sub a, MAX_SCROLL_X
 .set_x
   ld b, 8  ; This adds a +8 dot offset to account for how sprites are rendered.
   add a, b
-  ld [b_spriteX], a ; TODO: Probably not needed...
+  ld [b_spriteX], a
   ld [ary_SpriteOAM + 1], a
   add a, 8
   ld [ary_SpriteOAM + 5], a
@@ -777,39 +735,37 @@ UpdateSpritePosition:
 ; Calculates and handles screen scrolling based on the player's position in the
 ; game world.
 ; ------------------------------------------------------------------------------
-; TODO This code is a mess and can be refactored significantly.
-; ------------------------------------------------------------------------------
 ScrollScreen:
   ; Horizontal scrolling
   ld hl, rSCX
   ld b, 0
   ld a, [b_worldX]
-  cp 80                 ; TODO Define constant
+  cp SCROLL_START_X
   jr c, .set_scroll_x
 .check_scrolling_x
-  cp 176                ; TODO Define constant
+  cp 256 - SCROLL_START_X
   jr nc, .max_scroll_x
-  sub 80                ; TODO Define constant
+  sub SCROLL_START_X
   ld b, a
   jr .set_scroll_x
 .max_scroll_x
-  ld b, 96              ; TODO Define constant
+  ld b, MAX_SCROLL_X
 .set_scroll_x
   ld [hl], b
   ; Vertical scrolling
   ld hl, rSCY
   ld b, 0
   ld a, [b_worldY]
-  cp 72                 ; TODO Define constant
+  cp SCROLL_START_Y
   jr c, .set_scroll_y
 .check_scrolling_y
-  cp 184                ; TODO Define constant
+  cp 256 - SCROLL_START_Y
   jr nc, .max_scroll_y
-  sub 72                ; TODO Define constant
+  sub SCROLL_START_Y
   ld b, a
   jr .set_scroll_y
 .max_scroll_y
-  ld b, 112             ; TODO Define constant
+  ld b, MAX_SCROLL_Y
 .set_scroll_y
   ld [hl], b
   ret

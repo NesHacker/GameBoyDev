@@ -2,6 +2,8 @@ INCLUDE "game.inc"
 INCLUDE "hardware.inc"
 INCLUDE "player.inc"
 
+; TODO Handle coin collision
+
 ; Temporarily holds background tile column for that contains the player's
 ; position (the point at the top left of the player sprite).
 DEF TileColumn EQU $CBF0
@@ -27,11 +29,26 @@ DEF CollisionHeading EQU $CBF5
 ; Width to use when testing with the player sprite.
 Def PlayerWidth EQU $CBF6
 
+; Column where a coin was found during a collision.
+Def CoinCol EQU $CBF7
+
+; Row where a coin was found during a collision.
+Def CoinRow EQU $CBF8
+
 ; Width and height of the player sprite in pixels (used for AABB collision).
 DEF PLAYER_WIDTH EQU 16
 
 ; Width and height of a background tile in pixels (used for AABB collision).
 DEF TILE_WIDTH EQU 8
+
+; Value for data tiles that represent open space.
+DEF TILE_OPEN EQU 0
+
+; Value for data tiles that are impassible.
+DEF TILE_IMPASSIBLE EQU 1
+
+; Value for data tiles that are coins.
+DEF TILE_COIN EQU 2
 
 SECTION "Collision", ROM0
 
@@ -60,7 +77,6 @@ CheckCollision::
   rrca
   rrca
   ld [TileRow], a
-
   ; Then we calclate the starting address for that particular tile in the level
   ; data using some basic math that's been converted to use bitwise operations
   ; (this makes it easier to do in assembly):
@@ -86,13 +102,11 @@ CheckCollision::
   ld d, a
   ld hl, LevelData    ; hl <- LevelData + 32 * TileRow + TileColumn
   add hl, de
-
   ; Set d and e to the tile column and row respectively
   ld a, [TileColumn]
   ld d, a
   ld a, [TileRow]
   ld e, a
-
   ; Test collision based on the current motion state for the player
   ld a, [b_motionState]
   cp STATE_IDLE
@@ -110,20 +124,41 @@ CheckCollision::
   ld a, [b_motionState]
   cp STATE_AIRBORNE
   jr z, .test_airborne
-.grounded
+  call CheckGroundedCollision
+  call CheckFall
+  ret
+.test_airborne:
+  call CheckAirborneCollision
+  ret
+
+; ------------------------------------------------------------------------------
+; `func CheckGroundedCollision()`
+;
+; Checks collision when the player is grounded.
+; ------------------------------------------------------------------------------
+CheckGroundedCollision:
   call TestHorizontal
-  jr z, .check_fall
+  jr nz, .handle_collision
+  ret
+.handle_collision:
+  jr z, .return
   call MoveHorizontal
   call UpdateHorizontalPosition
   call StopHorizontal
   ld a, STATE_IDLE
   ld [b_motionState], a
-.check_fall
-  call CheckFall
+.return
   ret
-.test_airborne:
+
+; ------------------------------------------------------------------------------
+; `func CheckAirborneCollision()`
+;
+; Checks collision when the player is airborne.
+; ------------------------------------------------------------------------------
+CheckAirborneCollision:
   call TestHorizontal
   jr z, .test_vertical
+  jr z, .return
   call MoveHorizontal
   call TestPlayerTopTiles
   jr nz, .move_vertical
@@ -132,12 +167,13 @@ CheckCollision::
   ret
 .test_vertical
   call TestVertical
-  jr z, .done
+  jr z, .return
 .move_vertical
+  jr z, .return
   call MoveVertical
   call StopVertical
   call UpdateVerticalPosition
-.done
+.return
   ret
 
 ; ------------------------------------------------------------------------------
@@ -185,8 +221,6 @@ StopHorizontal::
 ;
 ; Checks the three tiles below the player to determine if they are no longer
 ; grounded and should begin to fall.
-; ------------------------------------------------------------------------------
-; TODO Fix falling at right edge bug...
 ; ------------------------------------------------------------------------------
 CheckFall:
   inc e
@@ -264,8 +298,6 @@ StopVertical::
   sla a
   ld [CollisionY], a
 .done
-  ; TODO Handle other collision types
-  ; (e.g. We shouldn't land when falling on a coin...)
   ld a, STATE_IDLE
   ld [b_motionState], a
   ret
@@ -459,9 +491,25 @@ CheckTileCollision:
 .collision_detected
   ; If the above tests failed then we have a collision!
   ld a, [hl]
-  cp 0
+  cp TILE_COIN
+  jr nz, .non_coin
+  call CollectCoin
+  ret
+.non_coin
+  cp TILE_OPEN
   ret
 
+; ------------------------------------------------------------------------------
+; `func CollectCoin()`
+;
+; Collects coins and clears them from the background and level data.
+; ------------------------------------------------------------------------------
+CollectCoin:
+  ; TODO Implement me
+  ; Check the nine squares around the coin and clear them if they are coin
+  ; tiles
+  ; Coin tile ids: $88, $89, $98, $99
+  ret
 
 ; ------------------------------------------------------------------------------
 ; `func UpdateHorizontalPosition()`
