@@ -141,7 +141,10 @@ CheckCollision::
   ret
 
 ; ------------------------------------------------------------------------------
-; TODO Document me
+; `func MoveHorizontal()`
+;
+; Aligns the player's hitbox with the tile grid and moves it left or right in
+; an attempt to resolve a collision.
 ; ------------------------------------------------------------------------------
 MoveHorizontal:
   ld a, [CollisionHeading]
@@ -166,7 +169,9 @@ MoveHorizontal:
   ret
 
 ; ------------------------------------------------------------------------------
-; TODO Document me
+; `func StopHorizontal()`
+;
+; Zeros out the player's horizontal velocity and resets all animation timers.
 ; ------------------------------------------------------------------------------
 StopHorizontal::
   ld a, 0
@@ -176,7 +181,11 @@ StopHorizontal::
   ret
 
 ; ------------------------------------------------------------------------------
-; TODO Document Me
+; `func CheckFall()`
+;
+; Checks the three tiles below the player to determine if they are no longer
+; grounded and should begin to fall.
+; ------------------------------------------------------------------------------
 ; TODO Fix falling at right edge bug...
 ; ------------------------------------------------------------------------------
 CheckFall:
@@ -205,7 +214,10 @@ CheckFall:
   ret
 
 ; ------------------------------------------------------------------------------
-; TODO Document me
+; `func MoveVertical()`
+;
+; Aligns the player's hitbox with the tile grid and moves it up or down in an
+; attempt to resolve a collision.
 ; ------------------------------------------------------------------------------
 MoveVertical:
   ld a, [f_playerVelocityY]
@@ -228,7 +240,9 @@ MoveVertical:
   ret
 
 ; ------------------------------------------------------------------------------
-; TODO Document me
+; `func StopVertical`
+;
+; Stops the player's movement if they collided with a wall from above or below.
 ; ------------------------------------------------------------------------------
 StopVertical::
   ld a, [f_playerVelocityY]

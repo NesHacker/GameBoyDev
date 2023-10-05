@@ -19,9 +19,7 @@ Tileset:: INCBIN "tileset.gb"
 ; representing levels and use an encoding scheme (e.g. run-length encoding) to
 ; minimize ROM data usage.
 ; ------------------------------------------------------------------------------
-LevelTilemap:: INCBIN "level-collisiontest1.tilemap"
-
-; LevelTilemap:: INCBIN "level.tilemap"
+LevelTilemap:: INCBIN "level.tilemap"
 
 ; ------------------------------------------------------------------------------
 ; `binary data LevelData`
@@ -40,6 +38,4 @@ LevelTilemap:: INCBIN "level-collisiontest1.tilemap"
 ; - `6`: coins
 ; - `7`: switch blocks
 ; ------------------------------------------------------------------------------
-LevelData:: INCBIN "level-collisiontest1-data.tilemap"
-
-; LevelData:: INCBIN "level-data.tilemap"
+LevelData:: INCBIN "level-data.tilemap"
