@@ -26,6 +26,9 @@ DEF CollisionY EQU $CBF4
 ; Heading to check when testing collision.
 DEF CollisionHeading EQU $CBF5
 
+; Address to the player's current tile in the graphics tilemap (2 bytes).
+DEF tileMapAddress EQU $CBF6
+
 ; Width to use when testing with the player sprite.
 Def PlayerWidth EQU $CBF6
 
@@ -100,6 +103,12 @@ CheckCollision::
   ld a, 0
   adc d
   ld d, a
+  ld hl, $9800        ; Store the address to the graphics tile in the tilemap
+  add hl, de
+  ld a, h
+  ld [tileMapAddress], a
+  ld a, l
+  ld [tileMapAddress + 1], a
   ld hl, LevelData    ; hl <- LevelData + 32 * TileRow + TileColumn
   add hl, de
   ; Set d and e to the tile column and row respectively
@@ -494,6 +503,9 @@ CheckTileCollision:
   cp TILE_COIN
   jr nz, .non_coin
   call CollectCoin
+  ; Indicate that this should be treated as an open tile for movement collision
+  ld a, 0
+  cp 0
   ret
 .non_coin
   cp TILE_OPEN
@@ -502,13 +514,83 @@ CheckTileCollision:
 ; ------------------------------------------------------------------------------
 ; `func CollectCoin()`
 ;
-; Collects coins and clears them from the background and level data.
+; Collects coins and clears them from the background. Note this doesn't clear
+; the level data associated with coins (I'd need to store the level data in RAM
+; in order to do this).
 ; ------------------------------------------------------------------------------
 CollectCoin:
-  ; TODO Implement me
-  ; Check the nine squares around the coin and clear them if they are coin
-  ; tiles
-  ; Coin tile ids: $88, $89, $98, $99
+  ; Find the address in the tilemap for the column and row of the coin tile
+  push hl
+  ld a, [tileMapAddress]
+  ld h, a
+  ld a, [tileMapAddress + 1]
+  ld l, a
+  ld a, [TileColumn]
+  ld b, a
+  ld a, d
+  sub a, b
+: cp 0
+  jr z, .update_row
+  inc hl
+  dec a
+  jr :-
+.update_row
+  ld a, [TileRow]
+  ld b, a
+  ld a, b
+  sub a, b
+  ld bc, 32
+: cp 0
+  jr z, .check_coin_tile
+  add hl, bc
+  jr :-
+  ; Based on the tile found at the address, clear the coin tiles in both the
+  ; level graphics and level data.
+.check_coin_tile
+  ld a, [hl]
+  cp $88
+  jr z, .top_left
+  cp $89
+  jr z, .top_right
+  cp $98
+  jr z, .bottom_left
+  cp $99
+  jr z, .bottom_right
+  jr .return
+.top_left
+  call ClearCoinTiles
+  jr .return
+.top_right
+  dec hl
+  call ClearCoinTiles
+  jr .return
+.bottom_left
+  ld bc, $FFE0 ; -32
+  add hl, bc
+  call ClearCoinTiles
+  jr .return
+.bottom_right
+  ld bc, $FFE0 ; -32
+  add hl, bc
+  dec hl
+  call ClearCoinTiles
+.return
+  pop hl
+  ret
+
+; ------------------------------------------------------------------------------
+; `func ClearCoinTiles(hl)`
+;
+; Clears four tiles starting at address `hl`.
+; ------------------------------------------------------------------------------
+ClearCoinTiles:
+  ld a, 0
+  ld [hli], a
+  ld [hld], a
+  ld bc, 32
+  add hl, bc
+  ld [hli], a
+  ld [hl], a
   ret
 
 ; ------------------------------------------------------------------------------
