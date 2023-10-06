@@ -1,13 +1,12 @@
 # GameBoyDev
-An example gameboy game project for use with the
-[Game Boy Development Environment](https://youtube.com/NesHacker) YouTube video.
+An example gameboy game project.
 
 ## How to Build the ROM
 
 ### Depedencies
 * [RGBDS](https://github.com/rednex/rgbds) - Game Boy Assembly & Linking Tools
 * [GNU Make](https://gnuwin32.sourceforge.net/packages/make.htm) - Build system
-tool (usually you'll only need to install this on Windows).
+tool (installation should only be required on Windows).
 
 ### Use Make to Build the ROM
 With the assembler installed, open a command-line and run make:
@@ -17,6 +16,12 @@ $ make
 ```
 
 This will run the make script and produce the `bin/GameBoyDev.gb` rom.
+
+
+### Easy Build in VS Code
+
+* Use the command pallette (`CTRL/CMD + SHIFT + P`) and select
+`Tasks: Run Build Task`.
 
 ### Build Settings (ROM name, etc.)
 For changes to how the game is assembled and linked, change the parameters in
