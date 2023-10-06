@@ -1,3 +1,65 @@
+; ------------------------------------------------------------------------------
+; Variables
+; ------------------------------------------------------------------------------
+
+; The state of the player.
+;
+; * `STATE_IDLE` - State for when the player is not actively moving.
+; * `STATE_WALKING` - Motion state that denotes the player is walking.
+; * `STATE_PIVOT` - Motion state used to indicate the player is pivoting while
+;   changing direction.
+; * `STATE_AIRBORNE` - Motion state to denote that the player is airborne.
+DEF bMotionState EQU $CC00
+
+; The direction the player is facing.
+DEF bPlayerHeading EQU $CC01
+
+; The player's horizontal position in world coordinates (12.4 fixed point).
+DEF fPlayerX EQU $CC02
+
+; THe player's current velocity as an 4.4 fixed point value.
+DEF fPlayerVelocityX EQU $CC04
+
+; The player's desired velocity as an 4.4 fixed point value.
+DEF fTargetVelocityX EQU $CC05
+
+; The player's vertical postion in world coordinates (12.4 fixed point).
+DEF fPlayerY EQU $CC06
+
+; The player's vertical velocity as an 4.4 fixed point value.
+DEF fPlayerVelocityY EQU $CC08
+
+; X-coordinate for the player's sprite.
+DEF bSpriteX EQU $CC09
+
+; Y-coordinate for the player's sprite.
+DEF bSpriteY EQU $CC0A
+
+; Player's integer x-coordinate in world coordinates.
+DEF bWorldX EQU $CC0B
+
+; Player's integer y-coordinate in world coordinates.
+DEF bWorldY EQU $CC0C
+
+; Walk/run animation timer.
+DEF bAnimationTimer EQU $CC0D
+
+; Walk/run animation frame.
+DEF bAnimationFrame EQU $CC0E
+
+; Idle animation state
+DEF bIdleState EQU $CC0F
+
+; Idle animation timer
+DEF bIdleTimer EQU $CC10
+
+; Timer used for transitioning from "slow" to "fast" falling.
+DEF bSlowFallTimer EQU $CC11
+
+; ------------------------------------------------------------------------------
+; Constants
+; ------------------------------------------------------------------------------
+
 ; Player state when the character is idle.
 DEF STATE_IDLE EQU 0
 
@@ -85,64 +147,6 @@ DEF MAX_SCROLL_X EQU 96
 
 ; Maximum vertical scroll for the screen.
 DEF MAX_SCROLL_Y EQU 112
-
-; ------------------------------------------------------------------------------
-; Variable memory locations.
-; ------------------------------------------------------------------------------
-
-; The state of the player.
-;
-; * `STATE_IDLE` - State for when the player is not actively moving.
-; * `STATE_WALKING` - Motion state that denotes the player is walking.
-; * `STATE_PIVOT` - Motion state used to indicate the player is pivoting while
-;   changing direction.
-; * `STATE_AIRBORNE` - Motion state to denote that the player is airborne.
-DEF b_motionState EQU $CC00
-
-; The direction the player is facing.
-DEF b_playerHeading EQU $CC01
-
-; The player's horizontal position in world coordinates (12.4 fixed point).
-DEF f_playerX EQU $CC02
-
-; THe player's current velocity as an 4.4 fixed point value.
-DEF f_playerVelocityX EQU $CC04
-
-; The player's desired velocity as an 4.4 fixed point value.
-DEF f_targetVelocityX EQU $CC05
-
-; The player's vertical postion in world coordinates (12.4 fixed point).
-DEF f_playerY EQU $CC06
-
-; The player's vertical velocity as an 4.4 fixed point value.
-DEF f_playerVelocityY EQU $CC08
-
-; X-coordinate for the player's sprite.
-DEF b_spriteX EQU $CC09
-
-; Y-coordinate for the player's sprite.
-DEF b_spriteY EQU $CC0A
-
-; Player's integer x-coordinate in world coordinates.
-DEF b_worldX EQU $CC0B
-
-; Player's integer y-coordinate in world coordinates.
-DEF b_worldY EQU $CC0C
-
-; Walk/run animation timer.
-DEF b_animationTimer EQU $CC0D
-
-; Walk/run animation frame.
-DEF b_animationFrame EQU $CC0E
-
-; Idle animation state
-DEF b_idleState EQU $CC0F
-
-; Idle animation timer
-DEF b_idleTimer EQU $CC10
-
-; Timer used for transitioning from "slow" to "fast" falling.
-DEF b_slowFallTimer EQU $CC11
 
 ; Initial delay between frames of the walking animation.
 DEF INITIAL_WALK_ANIMATION_DELAY EQU 12

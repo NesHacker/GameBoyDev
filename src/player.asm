@@ -14,12 +14,12 @@ SECTION "Player", ROM0
 ; ------------------------------------------------------------------------------
 InitializePlayer::
   ld a, INITIAL_STATE
-  ld [b_motionState], a
+  ld [bMotionState], a
 
   ld a, INITIAL_HEADING
-  ld [b_playerHeading], a
+  ld [bPlayerHeading], a
 
-  ld hl, f_playerX
+  ld hl, fPlayerX
 
   ld a, INITIAL_X_LO
   ld [hli], a
@@ -27,24 +27,24 @@ InitializePlayer::
   ld [hli], a
 
   ld a, 0
-  ld [hli], a   ; f_playerVelocityX = 0
-  ld [hli], a   ; f_targetVelocityX = 0
+  ld [hli], a   ; fPlayerVelocityX = 0
+  ld [hli], a   ; fTargetVelocityX = 0
 
-  ; f_playerY
+  ; fPlayerY
   ld a, INITIAL_Y_LO
   ld [hli], a
   ld a, INITIAL_Y_HI
   ld [hli], a
 
   ld a, 0
-  ld [hli], a ; f_playerVelocityY
+  ld [hli], a ; fPlayerVelocityY
 
 
   ld a, INITIAL_SPRITE_X
-  ld [b_spriteX], a
+  ld [bSpriteX], a
 
   ld a, INITIAL_SPRITE_Y
-  ld [b_spriteY], a
+  ld [bSpriteY], a
 
   ; Initialize the screen position
   ld a, INITIAL_SCREEN_X
@@ -53,12 +53,12 @@ InitializePlayer::
   ld [rSCY], a
 
   ; Initialize the character sprites
-  ld hl, ary_SpriteOAM
+  ld hl, pSpriteOAM
   ld a, INITIAL_SPRITE_Y
-  ld [b_spriteY], a
+  ld [bSpriteY], a
   ld [hli], a
   ld a, INITIAL_SPRITE_X
-  ld [b_spriteX], a
+  ld [bSpriteX], a
   ld [hli], a
   ld a, $20
   ld [hli], a
@@ -76,7 +76,7 @@ InitializePlayer::
   call ResetAnimationTimers
 
   ld a, 0
-  ld [b_slowFallTimer], a
+  ld [bSlowFallTimer], a
 
   ret
 
@@ -87,13 +87,13 @@ InitializePlayer::
 ; ------------------------------------------------------------------------------
 ResetAnimationTimers::
   ld a, INITIAL_WALK_ANIMATION_DELAY
-  ld [b_animationTimer], a
+  ld [bAnimationTimer], a
   ld a, 0
-  ld [b_animationFrame], a
+  ld [bAnimationFrame], a
   ld a, [idle_timer_durations]
-  ld [b_idleTimer], a
+  ld [bIdleTimer], a
   ld a, IDLE_STATE_STILL
-  ld [b_idleState], a
+  ld [bIdleState], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -119,23 +119,23 @@ UpdatePlayer::
 ; Updates player state for vertical motion (jumping and falling).
 ; ------------------------------------------------------------------------------
 UpdateVerticalMotion:
-  ld a, [b_motionState]
+  ld a, [bMotionState]
   cp STATE_AIRBORNE
   jr z, .airborne
 .check_jump
-  ld a, [b_JoypadPressed]
+  ld a, [bJoypadPressed]
   and BUTTON_A
   jr nz, .begin_jump
   ld a, 0
-  ld [f_playerVelocityY], a
+  ld [fPlayerVelocityY], a
   ret
 .begin_jump
   ld a, SLOW_FALL_FRAMES
-  ld [b_slowFallTimer], a
+  ld [bSlowFallTimer], a
   ld a, INITIAL_JUMP_VELOCITY
-  ld [f_playerVelocityY], a
+  ld [fPlayerVelocityY], a
   ld a, STATE_AIRBORNE
-  ld [b_motionState], a
+  ld [bMotionState], a
   ret
 .airborne
   call AccelerateY
@@ -149,23 +149,23 @@ UpdateVerticalMotion:
 ; ------------------------------------------------------------------------------
 AccelerateY:
   ld b, 5
-  ld a, [b_slowFallTimer]
+  ld a, [bSlowFallTimer]
   cp a, 0
   jr z, .decelerate
   dec a
-  ld [b_slowFallTimer], a
+  ld [bSlowFallTimer], a
   cp a, 0
   jr z, .decelerate
-  ld a, [b_JoypadDown]
+  ld a, [bJoypadDown]
   and BUTTON_A
   jr z, .end_slow_fall
   ld b, 1
   jr .decelerate
 .end_slow_fall
   ld a, 0
-  ld [b_slowFallTimer], a
+  ld [bSlowFallTimer], a
 .decelerate
-  ld a, [f_playerVelocityY]
+  ld a, [fPlayerVelocityY]
   add a, b
   ld c, a
   and %1000_0000
@@ -177,7 +177,7 @@ AccelerateY:
   ld c, MAX_FALL_SPEED
 .store_velocity
   ld a, c
-  ld [f_playerVelocityY], a
+  ld [fPlayerVelocityY], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -186,8 +186,8 @@ AccelerateY:
 ; Applies vertical velocity to move the player through the game world.
 ; ------------------------------------------------------------------------------
 ApplyVelocityY:
-  ld a, [f_playerVelocityY]
-  ld hl, f_playerY
+  ld a, [fPlayerVelocityY]
+  ld hl, fPlayerY
   ld b, a
   cp a, 0
   jr nz, .check_negative
@@ -253,7 +253,7 @@ SetTargetVelocityX:
 
   ; Set default run or walk speed based on if the B button is down
   ld b, WALK_SPEED
-  ld a, [b_JoypadDown]
+  ld a, [bJoypadDown]
   ld d, a
   and a, BUTTON_B
   jr z, .check_right
@@ -263,7 +263,7 @@ SetTargetVelocityX:
   and a, BUTTON_RIGHT
   jr z, .check_left
   ld a, b
-  ld [f_targetVelocityX], a
+  ld [fTargetVelocityX], a
   ret
 .check_left
   ld a, d
@@ -272,11 +272,11 @@ SetTargetVelocityX:
   ld a, b
   cpl
   inc a
-  ld [f_targetVelocityX], a
+  ld [fTargetVelocityX], a
   ret
 .zero
   ld a, 0
-  ld [f_targetVelocityX], a
+  ld [fTargetVelocityX], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -286,18 +286,18 @@ SetTargetVelocityX:
 ; match.
 ; ------------------------------------------------------------------------------
 AccelerateX:
-  ld a, [b_motionState]
+  ld a, [bMotionState]
   cp STATE_AIRBORNE
   jr nz, .accelerate
 .airborne
-  ld a, [f_targetVelocityX]
+  ld a, [fTargetVelocityX]
   or 0
   jr nz, .check_directional_velocity
   ret
 .check_directional_velocity
-  ld a, [f_targetVelocityX]
+  ld a, [fTargetVelocityX]
   ld c, a
-  ld a, [f_playerVelocityX]
+  ld a, [fPlayerVelocityX]
   ld b, a
   and %1000_0000
   ld a, b
@@ -311,13 +311,13 @@ AccelerateX:
   jr c, .accelerate
   ret
 .accelerate
-  ld a, [f_playerVelocityX]
-  ld hl, f_targetVelocityX
+  ld a, [fPlayerVelocityX]
+  ld hl, fTargetVelocityX
   sub a, [hl]
   jr nz, .check_sign
   ret
 .check_sign
-  ld hl, f_playerVelocityX
+  ld hl, fPlayerVelocityX
   and %1000_0000
   jr z, .decrement
   inc [hl]
@@ -332,8 +332,8 @@ AccelerateX:
 ; Applies the current velocity to the position to move the character.
 ; ------------------------------------------------------------------------------
 ApplyVelocityX:
-  ld a, [f_playerVelocityX]
-  ld hl, f_playerX
+  ld a, [fPlayerVelocityX]
+  ld hl, fPlayerX
   ld b, a
   cp a, 0
   jr nz, .check_negative
@@ -397,12 +397,12 @@ ApplyVelocityX:
 ; for use when rendering the game's graphics.
 ; ------------------------------------------------------------------------------
 ConvertWorldCoordinates::
-  ld hl, f_playerX
+  ld hl, fPlayerX
   call FixedPointToInt
-  ld [b_worldX], a
-  ld hl, f_playerY
+  ld [bWorldX], a
+  ld hl, fPlayerY
   call FixedPointToInt
-  ld [b_worldY], a
+  ld [bWorldY], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -450,7 +450,7 @@ UpdateSprite:
 ; Updates the motion state based on target and current velocity.
 ; ------------------------------------------------------------------------------
 UpdateMotionState:
-  ld a, [b_motionState]
+  ld a, [bMotionState]
   cp STATE_AIRBORNE
   jr nz, .grounded
 .airborne
@@ -466,8 +466,8 @@ UpdateMotionState:
   ;     If T > 0 && V < 0: PIVOT
   ;     If T < 0 && V > 0: PIVOT
   ;   Else: WALK
-  ld a, [f_targetVelocityX]
-  ld hl, f_playerVelocityX
+  ld a, [fTargetVelocityX]
+  ld hl, fPlayerVelocityX
   cp a, [hl]
   jr nz, .accelerating
 .steady
@@ -475,29 +475,29 @@ UpdateMotionState:
   jr nz, .walk
 .still
   ld a, STATE_IDLE
-  ld [b_motionState], a
+  ld [bMotionState], a
   ret
 .accelerating
-  ld a, [b_JoypadDown]
+  ld a, [bJoypadDown]
   ld b, a
   ld a, BUTTON_LEFT
   or BUTTON_RIGHT
   and b
   jr z, .walk
-  ld a, [f_targetVelocityX]
+  ld a, [fTargetVelocityX]
   and %1000_0000
   ld b, a
-  ld a, [f_playerVelocityX]
+  ld a, [fPlayerVelocityX]
   and %1000_0000
   cp a, b
   jr z, .walk
 .pivot
   ld a, STATE_PIVOT
-  ld [b_motionState], a
+  ld [bMotionState], a
   ret
 .walk
   ld a, STATE_WALKING
-  ld [b_motionState], a
+  ld [bMotionState], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -506,23 +506,23 @@ UpdateMotionState:
 ; Updates the animation frame based on motion state and velocity.
 ; ------------------------------------------------------------------------------
 UpdateAnimationFrame:
-  ld a, [f_playerVelocityX]
+  ld a, [fPlayerVelocityX]
   or a
   jr nz, .timer
   ld a, [delay_by_velocity]
-  ld [b_animationTimer], a
+  ld [bAnimationTimer], a
   ret
 .timer
-  ld a, [b_animationTimer]
+  ld a, [bAnimationTimer]
   dec a
   jr z, .next_frame
-  ld [b_animationTimer], a
+  ld [bAnimationTimer], a
   ret
 .next_frame
-  ld a, [b_animationFrame]
+  ld a, [bAnimationFrame]
   xor 1
-  ld [b_animationFrame], a
-  ld a, [f_playerVelocityX]
+  ld [bAnimationFrame], a
+  ld a, [fPlayerVelocityX]
   ld b, a
   and %1000_0000
   jr z, .lookup
@@ -537,7 +537,7 @@ UpdateAnimationFrame:
   ld de, delay_by_velocity
   add hl, de
   ld a, [hl]
-  ld [b_animationTimer], a
+  ld [bAnimationTimer], a
   ret
 
 delay_by_velocity:
@@ -551,7 +551,7 @@ DB 6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4
 ; Updates the player's heading based on current velocity.
 ; ------------------------------------------------------------------------------
 UpdateHeading:
-  ld a, [f_targetVelocityX]
+  ld a, [fTargetVelocityX]
   cp 0
   jr nz, .check_heading
   ret
@@ -559,17 +559,17 @@ UpdateHeading:
   rlc a
   and 1
   ld b, a
-  ld a, [b_playerHeading]
+  ld a, [bPlayerHeading]
   cp b
   jr nz, .update_heading
   ret
 .update_heading
   ld a, b
-  ld [b_playerHeading], a
-  ld a, [ary_SpriteOAM + 3]
+  ld [bPlayerHeading], a
+  ld a, [pSpriteOAM + 3]
   xor %0010_0000
-  ld [ary_SpriteOAM + 3], a
-  ld [ary_SpriteOAM + 7], a
+  ld [pSpriteOAM + 3], a
+  ld [pSpriteOAM + 7], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -578,34 +578,34 @@ UpdateHeading:
 ; Updates the idle animation state based on the motion state and timers.
 ; ------------------------------------------------------------------------------
 UpdateIdleState:
-  ld a, [b_motionState]
+  ld a, [bMotionState]
   cp STATE_IDLE
   jr z, .update_timer
   ld a, [idle_timer_durations]
-  ld [b_idleTimer], a
+  ld [bIdleTimer], a
   ld a, IDLE_STATE_STILL
-  ld [b_idleState], a
+  ld [bIdleState], a
   ret
 .update_timer
-  ld a, [b_idleTimer]
+  ld a, [bIdleTimer]
   dec a
   jr z, .update_state
-  ld [b_idleTimer], a
+  ld [bIdleTimer], a
   ret
 .update_state
-  ld a, [b_idleState]
+  ld a, [bIdleState]
   inc a
   cp 4
   jr nz, .set_state
   ld a, 0
 .set_state
-  ld [b_idleState], a
+  ld [bIdleState], a
   ld l, a
   ld h, 0
   ld de, idle_timer_durations
   add hl, de
   ld a, [hl]
-  ld [b_idleTimer], a
+  ld [bIdleTimer], a
   ret
 
 idle_timer_durations:
@@ -617,7 +617,7 @@ idle_timer_durations:
 ; Updates the player sprite tiles based the current motion and animation state.
 ; ------------------------------------------------------------------------------
 UpdateSpriteTiles:
-  ld a, [b_motionState]
+  ld a, [bMotionState]
   cp STATE_AIRBORNE
   jr z, .airborne
   cp STATE_PIVOT
@@ -625,43 +625,43 @@ UpdateSpriteTiles:
   cp STATE_WALKING
   jr z, .walk
 .still
-  ld a, [b_idleState]
+  ld a, [bIdleState]
   sla a
   sla a
   ld b, a
-  ld a, [b_playerHeading]
+  ld a, [bPlayerHeading]
   add b
   ld de, idle_tiles
   jr .set_tiles
   ret
 .airborne
-  ld a, [b_playerHeading]
+  ld a, [bPlayerHeading]
   ld de, jumping_tiles
   jr .set_tiles
   ret
 .walk
-  ld a, [b_animationFrame]
+  ld a, [bAnimationFrame]
   sla a
   sla a
   ld b, a
-  ld a, [b_playerHeading]
+  ld a, [bPlayerHeading]
   add b
   ld de, walk_tiles
   jr .set_tiles
   ret
 .pivot
-  ld a, [b_playerHeading]
+  ld a, [bPlayerHeading]
   ld de, pivot_tiles
 .set_tiles
   ld l, a
   ld h, 0
   add hl, de
   ld a, [hl]
-  ld [ary_SpriteOAM + 2], a
+  ld [pSpriteOAM + 2], a
   inc hl
   inc hl
   ld a, [hl]
-  ld [ary_SpriteOAM + 6], a
+  ld [pSpriteOAM + 6], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -687,7 +687,7 @@ idle_tiles:
 ; ------------------------------------------------------------------------------
 UpdateSpritePosition:
   ; Basic Vertical Positioning.
-  ld a, [b_worldY]
+  ld a, [bWorldY]
   ld b, a
   cp SCROLL_START_Y
   jr c, .set_y
@@ -703,12 +703,12 @@ UpdateSpritePosition:
   ; Add a +16 dot offset due to how sprites are rendered
   ld b, $10
   add a, b
-  ld [b_spriteY], a
-  ld a, [b_spriteY]
-  ld [ary_SpriteOAM], a
-  ld [ary_SpriteOAM + 4], a
+  ld [bSpriteY], a
+  ld a, [bSpriteY]
+  ld [pSpriteOAM], a
+  ld [pSpriteOAM + 4], a
   ; Basic Horizontal Positioning.
-  ld a, [b_worldX]
+  ld a, [bWorldX]
   ld b, a
   cp 80
   jr c, .set_x
@@ -723,10 +723,10 @@ UpdateSpritePosition:
 .set_x
   ld b, 8  ; This adds a +8 dot offset to account for how sprites are rendered.
   add a, b
-  ld [b_spriteX], a
-  ld [ary_SpriteOAM + 1], a
+  ld [bSpriteX], a
+  ld [pSpriteOAM + 1], a
   add a, 8
-  ld [ary_SpriteOAM + 5], a
+  ld [pSpriteOAM + 5], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -739,7 +739,7 @@ ScrollScreen:
   ; Horizontal scrolling
   ld hl, rSCX
   ld b, 0
-  ld a, [b_worldX]
+  ld a, [bWorldX]
   cp SCROLL_START_X
   jr c, .set_scroll_x
 .check_scrolling_x
@@ -755,7 +755,7 @@ ScrollScreen:
   ; Vertical scrolling
   ld hl, rSCY
   ld b, 0
-  ld a, [b_worldY]
+  ld a, [bWorldY]
   cp SCROLL_START_Y
   jr c, .set_scroll_y
 .check_scrolling_y

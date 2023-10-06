@@ -28,7 +28,7 @@ ENDM
 DEF DMATransfer EQU $FF80
 
 ; ------------------------------------------------------------------------------
-; WRAM Variable Locations
+; Variables
 ; ------------------------------------------------------------------------------
 
 ; Bitfield that stores current buttons being pressed on the Game Boy's joypad.
@@ -41,7 +41,7 @@ DEF DMATransfer EQU $FF80
 ; - Bit 5 (`BUTTON_B`) - B
 ; - Bit 6 (`BUTTON_SELECT`) - Select
 ; - Bit 7 (`BUTTON_START`) - Start
-DEF b_JoypadDown EQU $C020
+DEF bJoypadDown EQU $C020
 
 ; Bitfield that stores the buttons that were pressed as of the last joypad read.
 ;
@@ -53,7 +53,30 @@ DEF b_JoypadDown EQU $C020
 ; - Bit 5 (`BUTTON_B`) - B
 ; - Bit 6 (`BUTTON_SELECT`) - Select
 ; - Bit 7 (`BUTTON_START`) - Start
-DEF b_JoypadPressed EQU $C021
+DEF bJoypadPressed EQU $C021
+
+; WRAM location for Object (Sprite) OAM data that is transferred to VRAM via DMA
+; at the end of each frame during the VBLANK period.
+DEF pSpriteOAM EQU $C100
+
+; WRAM copy of the level data that is used to handle game mechanics and events.
+DEF pLevelData EQU $D000
+
+; ------------------------------------------------------------------------------
+; Constants
+; ------------------------------------------------------------------------------
+
+; Length of the OAM data region, in bytes.
+DEF len_SpriteOAM EQU 160
+
+; Number of bytes in the tileset for the game.
+DEF len_Tileset EQU 6144
+
+; Number of bytes in the level's tilemap.
+DEF len_LevelTilemap EQU 1024
+
+; Number of bytes int the level data.
+DEF len_LevelData EQU 1024
 
 ; Button mask for the right D-PAD button.
 DEF BUTTON_RIGHT  EQU 1 << 0
@@ -78,36 +101,3 @@ DEF BUTTON_SELECT EQU 1 << 6
 
 ; Button mask for the start button.
 DEF BUTTON_START  EQU 1 << 7
-
-; Timer used for the common background tile animator.
-DEF b_BgTimer EQU $C080
-
-; Delay in system frames to delay between background animation frames.
-DEF BgDelay EQU 18
-
-; WRAM location for Object (Sprite) OAM data that is transferred to VRAM via DMA
-; at the end of each frame during the VBLANK period.
-DEF ary_SpriteOAM EQU $C100
-
-; Length of the OAM data region, in bytes.
-DEF len_SpriteOAM EQU 160
-
-; Array that holds the VRAM addresses for all onigiri sprites in the background.
-; This is used to update those sprites when performing background animation.
-DEF ary_Onigiri EQU $C300
-
-; WRAM copy of the level data that is used to handle game mechanics and events.
-DEF ary_LevelData EQU $D000
-
-; ------------------------------------------------------------------------------
-; Data constants
-; ------------------------------------------------------------------------------
-
-; Number of bytes in the tileset for the game.
-len_Tileset EQU 6144
-
-; Number of bytes in the level's tilemap.
-len_LevelTilemap EQU 1024
-
-; Number of bytes int the level data.
-len_LevelData EQU 1024

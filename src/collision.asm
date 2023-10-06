@@ -1,57 +1,7 @@
+INCLUDE "collision.inc"
 INCLUDE "game.inc"
 INCLUDE "hardware.inc"
 INCLUDE "player.inc"
-
-; TODO Handle coin collision
-
-; Temporarily holds background tile column for that contains the player's
-; position (the point at the top left of the player sprite).
-DEF TileColumn EQU $CBF0
-
-; Temporarily holds background tile column for that contains the player's
-; position (the point at the top left of the player sprite).
-DEF TileRow EQU $CBF1
-
-; If the player is not colliding this frame this will be set to `0`. If they are
-; colliding then it will be set to the level data id for the tile with which
-; they are colliding.
-DEF CollisionType EQU $CBF2
-
-; X-coordinate of the player bounding box to use when testing collision.
-DEF CollisionX EQU $CBF3
-
-; Y-Coordinate of the player bounding box to use when testing collision.
-DEF CollisionY EQU $CBF4
-
-; Heading to check when testing collision.
-DEF CollisionHeading EQU $CBF5
-
-; Address to the player's current tile in the graphics tilemap (2 bytes).
-DEF tileMapAddress EQU $CBF6
-
-; Width to use when testing with the player sprite.
-Def PlayerWidth EQU $CBF6
-
-; Column where a coin was found during a collision.
-Def CoinCol EQU $CBF7
-
-; Row where a coin was found during a collision.
-Def CoinRow EQU $CBF8
-
-; Width and height of the player sprite in pixels (used for AABB collision).
-DEF PLAYER_WIDTH EQU 16
-
-; Width and height of a background tile in pixels (used for AABB collision).
-DEF TILE_WIDTH EQU 8
-
-; Value for data tiles that represent open space.
-DEF TILE_OPEN EQU 0
-
-; Value for data tiles that are impassible.
-DEF TILE_IMPASSIBLE EQU 1
-
-; Value for data tiles that are coins.
-DEF TILE_COIN EQU 2
 
 SECTION "Collision", ROM0
 
@@ -65,31 +15,31 @@ CheckCollision::
   ; positions by eight and then rounding down, which can be done by bit shifting
   ; both values 3 positions to the right:
   ;
-  ; - TileColumn   = WorldX / 8 = WorldX >> 3
-  ; - TileRow      = WorldY / 8 = WorldY >> 3
-  ld a, [b_worldX]
-  ld [CollisionX], a
+  ; - bTileColumn   = WorldX / 8 = WorldX >> 3
+  ; - bTileRow      = WorldY / 8 = WorldY >> 3
+  ld a, [bWorldX]
+  ld [bCollisionX], a
   and %1111_1000
   rrca
   rrca
   rrca
-  ld [TileColumn], a
-  ld a, [b_worldY]
+  ld [bTileColumn], a
+  ld a, [bWorldY]
   and %1111_1000
   rrca
   rrca
   rrca
-  ld [TileRow], a
+  ld [bTileRow], a
   ; Then we calclate the starting address for that particular tile in the level
   ; data using some basic math that's been converted to use bitwise operations
   ; (this makes it easier to do in assembly):
   ;
-  ; DataAddress  = LevelData + 32 * TileRow + TileColumn
-  ;              = LevelData + (TileRow << 5) + TileColumn
+  ; DataAddress  = LevelData + 32 * bTileRow + bTileColumn
+  ;              = LevelData + (bTileRow << 5) + bTileColumn
   ;              = LevelData + ((WorldY >> 3) << 5) + (WorldX >> 3)
   ;              = LevelData + ((WorldY & %1111_1000) << 2) + (WorldX >> 3)
-  ld a, [b_worldY]    ; de <- 32 * TileRow = WorldY << 2
-  ld [CollisionY], a
+  ld a, [bWorldY]    ; de <- 32 * bTileRow = WorldY << 2
+  ld [bCollisionY], a
   and a, %1111_1000
   ld e, a
   ld d, 0
@@ -97,7 +47,7 @@ CheckCollision::
   rl d
   sla e
   rl d
-  ld a, [TileColumn]  ; de <- de + TileColumn = 32 * TileRow + TileColumn
+  ld a, [bTileColumn]  ; de <- de + bTileColumn = 32 * bTileRow + bTileColumn
   add a, e
   ld e, a
   ld a, 0
@@ -106,31 +56,31 @@ CheckCollision::
   ld hl, $9800        ; Store the address to the graphics tile in the tilemap
   add hl, de
   ld a, h
-  ld [tileMapAddress], a
+  ld [pTileMapAddress], a
   ld a, l
-  ld [tileMapAddress + 1], a
-  ld hl, LevelData    ; hl <- LevelData + 32 * TileRow + TileColumn
+  ld [pTileMapAddress + 1], a
+  ld hl, LevelData    ; hl <- LevelData + 32 * bTileRow + bTileColumn
   add hl, de
   ; Set d and e to the tile column and row respectively
-  ld a, [TileColumn]
+  ld a, [bTileColumn]
   ld d, a
-  ld a, [TileRow]
+  ld a, [bTileRow]
   ld e, a
   ; Test collision based on the current motion state for the player
-  ld a, [b_motionState]
+  ld a, [bMotionState]
   cp STATE_IDLE
   jr nz, :+
   ret
 : cp STATE_PIVOT
   jr nz, :+
-  ld a, [b_playerHeading]
+  ld a, [bPlayerHeading]
   xor 1
-  ld [CollisionHeading], a
+  ld [bCollisionHeading], a
   jr .collision_test
-: ld a, [b_playerHeading]
-  ld [CollisionHeading], a
+: ld a, [bPlayerHeading]
+  ld [bCollisionHeading], a
 .collision_test
-  ld a, [b_motionState]
+  ld a, [bMotionState]
   cp STATE_AIRBORNE
   jr z, .test_airborne
   call CheckGroundedCollision
@@ -155,7 +105,7 @@ CheckGroundedCollision:
   call UpdateHorizontalPosition
   call StopHorizontal
   ld a, STATE_IDLE
-  ld [b_motionState], a
+  ld [bMotionState], a
 .return
   ret
 
@@ -192,25 +142,25 @@ CheckAirborneCollision:
 ; an attempt to resolve a collision.
 ; ------------------------------------------------------------------------------
 MoveHorizontal:
-  ld a, [CollisionHeading]
+  ld a, [bCollisionHeading]
   cp 0
   jr nz, .moving_left
 .moving_right
-  ld a, [TileColumn]
+  ld a, [bTileColumn]
   sla a
   sla a
   sla a
-  ld [CollisionX], a
+  ld [bCollisionX], a
   ret
 .moving_left
-  ld a, [TileColumn]
+  ld a, [bTileColumn]
   inc a
   sla a
   sla a
   sla a
   inc d
   inc hl
-  ld [CollisionX], a
+  ld [bCollisionX], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -220,8 +170,8 @@ MoveHorizontal:
 ; ------------------------------------------------------------------------------
 StopHorizontal::
   ld a, 0
-  ld [f_targetVelocityX], a
-  ld [f_playerVelocityX], a
+  ld [fTargetVelocityX], a
+  ld [fPlayerVelocityX], a
   call ResetAnimationTimers
   ret
 
@@ -253,7 +203,7 @@ CheckFall:
   ret
 .set_falling
   ld a, STATE_AIRBORNE
-  ld [b_motionState], a
+  ld [bMotionState], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -263,23 +213,23 @@ CheckFall:
 ; attempt to resolve a collision.
 ; ------------------------------------------------------------------------------
 MoveVertical:
-  ld a, [f_playerVelocityY]
+  ld a, [fPlayerVelocityY]
   and %1000_000
   jr nz, .rising
 .falling
-  ld a, [TileRow]
+  ld a, [bTileRow]
   sla a
   sla a
   sla a
-  ld [CollisionY], a
+  ld [bCollisionY], a
   ret
 .rising
-  ld a, [TileRow]
+  ld a, [bTileRow]
   inc a
   sla a
   sla a
   sla a
-  ld [CollisionY], a
+  ld [bCollisionY], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -288,31 +238,31 @@ MoveVertical:
 ; Stops the player's movement if they collided with a wall from above or below.
 ; ------------------------------------------------------------------------------
 StopVertical::
-  ld a, [f_playerVelocityY]
+  ld a, [fPlayerVelocityY]
   and %1000_0000
   jr nz, .rising
 .land
-  ld [CollisionType], a
-  ld a, [TileRow]
+  ld [bCollisionType], a
+  ld a, [bTileRow]
   sla a
   sla a
   sla a
-  ld [CollisionY], a
+  ld [bCollisionY], a
   call TestVertical
   jr z, .done
-  ld a, [TileRow]
+  ld a, [bTileRow]
   dec a
   sla a
   sla a
   sla a
-  ld [CollisionY], a
+  ld [bCollisionY], a
 .done
   ld a, STATE_IDLE
-  ld [b_motionState], a
+  ld [bMotionState], a
   ret
 .rising
   ld a, 0
-  ld [f_playerVelocityY], a
+  ld [fPlayerVelocityY], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -327,8 +277,8 @@ TestHorizontal:
   push hl
   push de
   ld a, 0
-  ld [CollisionType], a
-  ld a, [CollisionHeading]
+  ld [bCollisionType], a
+  ld a, [bCollisionHeading]
   cp HEADING_LEFT
   jr z, .check_tiles
   inc d
@@ -344,7 +294,7 @@ TestHorizontal:
   call CheckTileCollision
   jr nz, .collision
   jr .return
-  ld a, [b_motionState]
+  ld a, [bMotionState]
   cp STATE_AIRBORNE
   jr nz, .return
   inc e
@@ -352,7 +302,7 @@ TestHorizontal:
   add hl, bc
   call CheckTileCollision
   jr nz, .collision
-  ld a, [b_motionState]
+  ld a, [bMotionState]
   cp STATE_AIRBORNE
   jr nz, .return
   inc e
@@ -361,7 +311,7 @@ TestHorizontal:
   call CheckTileCollision
   jr z, .return
 .collision
-  ld [CollisionType], a
+  ld [bCollisionType], a
 .return
   pop de
   pop hl
@@ -379,7 +329,7 @@ TestHorizontal:
 ; - `de` - The column and row for the tile in the background.
 ; ------------------------------------------------------------------------------
 TestPlayerTopTiles:
-  ld a, [f_playerVelocityY]
+  ld a, [fPlayerVelocityY]
   and %1000_0000
   jr nz, .check_tiles
 .moving_down
@@ -396,7 +346,7 @@ TestPlayerTopTiles:
   jr nz, .collision
   ret
 .collision
-  ld [CollisionType], a
+  ld [bCollisionType], a
 
 ; ------------------------------------------------------------------------------
 ; `func TestVertical(hl, de)`
@@ -407,7 +357,7 @@ TestPlayerTopTiles:
 ; - `de` - The column and row for the tile in the background.
 ; ------------------------------------------------------------------------------
 TestVertical:
-  ld a, [f_playerVelocityY]
+  ld a, [fPlayerVelocityY]
   and %1000_0000
   jr nz, .check_tiles
 .moving_down
@@ -428,7 +378,7 @@ TestVertical:
   jr nz, .collision
   ret
 .collision
-  ld [CollisionType], a
+  ld [bCollisionType], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -456,7 +406,7 @@ CheckTileCollision:
   ld b, a
 .check_too_far_left
   ; if (X + 16 < tileX)  -> No Collision
-  ld a, [CollisionX]
+  ld a, [bCollisionX]
   ld c, a
   add a, PLAYER_WIDTH
   cp a, b
@@ -469,7 +419,7 @@ CheckTileCollision:
   cp a, c
   jr c, .no_hit
 .check_y_axis
-  ; b <- tileY = tileRow * 8 = tileRow << 3 = e << 3
+  ; b <- tileY = bTileRow * 8 = bTileRow << 3 = e << 3
   ld a, e
   sla a
   sla a
@@ -477,7 +427,7 @@ CheckTileCollision:
   ld b, a
 .check_too_far_above
   ; if (Y + 16 < tileY)  -> No Collision
-  ld a, [CollisionY]
+  ld a, [bCollisionY]
   ld c, a
   add a, PLAYER_WIDTH
   cp a, b
@@ -515,17 +465,16 @@ CheckTileCollision:
 ; `func CollectCoin()`
 ;
 ; Collects coins and clears them from the background. Note this doesn't clear
-; the level data associated with coins (I'd need to store the level data in RAM
-; in order to do this).
+; the level data associated with coins.
 ; ------------------------------------------------------------------------------
 CollectCoin:
   ; Find the address in the tilemap for the column and row of the coin tile
   push hl
-  ld a, [tileMapAddress]
+  ld a, [pTileMapAddress]
   ld h, a
-  ld a, [tileMapAddress + 1]
+  ld a, [pTileMapAddress + 1]
   ld l, a
-  ld a, [TileColumn]
+  ld a, [bTileColumn]
   ld b, a
   ld a, d
   sub a, b
@@ -535,7 +484,7 @@ CollectCoin:
   dec a
   jr :-
 .update_row
-  ld a, [TileRow]
+  ld a, [bTileRow]
   ld b, a
   ld a, b
   sub a, b
@@ -600,8 +549,8 @@ ClearCoinTiles:
 ; ------------------------------------------------------------------------------
 UpdateHorizontalPosition:
   ; Store the value in the world coordinates
-  ld a, [CollisionX]
-  ld [b_worldX], a
+  ld a, [bCollisionX]
+  ld [bWorldX], a
   ; Convert the x-position to 12.4 fixed point and store the value
   ld b, 0
   sla a
@@ -612,9 +561,9 @@ UpdateHorizontalPosition:
   rl b
   sla a
   rl b
-  ld [f_playerX], a
+  ld [fPlayerX], a
   ld a, b
-  ld [f_playerX + 1], a
+  ld [fPlayerX + 1], a
   ret
 
 ; ------------------------------------------------------------------------------
@@ -624,8 +573,8 @@ UpdateHorizontalPosition:
 ; ------------------------------------------------------------------------------
 UpdateVerticalPosition:
   ; Store the value in the world coordinates
-  ld a, [CollisionY]
-  ld [b_worldY], a
+  ld a, [bCollisionY]
+  ld [bWorldY], a
   ; Convert the x-position to 12.4 fixed point and store the value
   ld b, 0
   sla a
@@ -636,7 +585,7 @@ UpdateVerticalPosition:
   rl b
   sla a
   rl b
-  ld [f_playerY], a
+  ld [fPlayerY], a
   ld a, b
-  ld [f_playerY + 1], a
+  ld [fPlayerY + 1], a
   ret

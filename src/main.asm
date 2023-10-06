@@ -94,7 +94,7 @@ LoadLevel:
   call LoadData
   ld bc, len_LevelData
   ld de, LevelData
-  ld hl, ary_LevelData
+  ld hl, pLevelData
   call LoadData
   ret
 
