@@ -1,19 +1,19 @@
 # This file contains project configuration
 
-
 # Value that the ROM will be filled with
 PADVALUE := 0xFF
 
 ## Header constants (passed to RGBFIX)
 
-# ROM version (typically starting at 0 and incremented for each published version)
+# ROM version (typically starting at 0 and incremented for each published
+# version)
 VERSION := 0
 
 # 4-ASCII letter game ID
-GAMEID := BOIL
+GAMEID := GBDV
 
 # Game title, up to 11 ASCII chars
-TITLE := BOILERPLATE
+TITLE := GAMEBOYDEV
 
 # New licensee, 2 ASCII chars
 # Homebrew games FTW!
@@ -22,8 +22,8 @@ LICENSEE := HB
 OLDLIC := 0x33
 
 # MBC type, tells which hardware is in the cart
-# See https://gbdev.io/pandocs/#_0147-cartridge-type or consult any copy of Pan Docs
-# If using no MBC, consider enabling `-t` below
+# See https://gbdev.io/pandocs/#_0147-cartridge-type or consult any copy of Pan
+# Docs if using no MBC, consider enabling `-t` below
 MBC := 0x00
 
 # ROM size is set automatically by RGBFIX
@@ -34,9 +34,8 @@ MBC := 0x00
 SRAMSIZE := 0x00
 
 # ROM name
-ROMNAME := boilerplate
+ROMNAME := GameBoyDev
 ROMEXT  := gb
-
 
 # Compilation parameters, uncomment to apply, comment to cancel
 # "Sensible defaults" are included
@@ -45,7 +44,8 @@ ROMEXT  := gb
 ASFLAGS += -h
 
 # Export all labels
-# This means they must all have unique names, but they will all show up in the .sym and .map files
+# This means they must all have unique names, but they will all show up in the
+# .sym and .map files
 # ASFLAGS += -E
 
 # Game Boy Color compatible
