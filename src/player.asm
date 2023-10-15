@@ -287,7 +287,7 @@ SetTargetVelocityX:
 ; ------------------------------------------------------------------------------
 AccelerateX:
   ld a, [bMotionState]
-  cp STATE_AIRBORNE
+  cp STATE_IDLE
   jr nz, .accelerate
 .airborne
   ld a, [fTargetVelocityX]
